@@ -366,6 +366,7 @@ onMounted(() => {
                           multiple
                           collapse-tags
                           collapse-tags-tooltip
+                          clearable
                           :max-collapse-tags="2"
                           placeholder="选择语音包"
                           class="w-[180px]"
