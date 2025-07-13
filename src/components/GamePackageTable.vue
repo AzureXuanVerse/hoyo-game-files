@@ -21,19 +21,29 @@ function handleCopySelected() {
   const urls = selection.value.map(item => item.url).join('\n')
   copyToClipboard(urls)
 }
+
+function getFileTotalSize(files: FileInfoWithType[]) {
+  return formatBytes(files.reduce((total, file) => total + file.size, 0))
+}
 </script>
 
 <template>
-  <el-space>
-    <el-button size="small" @click="handleCopyAll">
+  <el-space class="mb-2">
+    <status-tag title="文件总数">
+      {{ data.length }}
+    </status-tag>
+    <status-tag title="文件总大小">
+      {{ getFileTotalSize(data) }}
+    </status-tag>
+    <el-button size="small" round @click="handleCopyAll">
       复制全部链接
     </el-button>
-    <el-button v-if="selection.length !== 0" size="small" @click="handleCopySelected">
+    <el-button v-if="selection.length !== 0" size="small" round @click="handleCopySelected">
       复制选中链接
     </el-button>
   </el-space>
   <el-table
-    :data="data" style="width: 100%" size="small"
+    :data="data" style="width: 100%" size="small" max-height="250"
     @selection-change="handleSelectionChange"
   >
     <el-table-column type="selection" width="28" />
