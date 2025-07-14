@@ -87,7 +87,7 @@ defineExpose({
       </el-button>
     </el-breadcrumb-item>
   </el-breadcrumb>
-  <table v-if="displayFileNode" class="w-full">
+  <table v-if="displayFileNode" class="w-full text-xs text-[#606266]">
     <colgroup>
       <col class="w-6">
       <col>
@@ -96,7 +96,7 @@ defineExpose({
       <col class="w-32">
     </colgroup>
     <thead>
-      <tr class="text-left text-sm">
+      <tr class="text-left text-[#909399]">
         <th />
         <th>名称</th>
         <th>类型</th>
@@ -104,15 +104,18 @@ defineExpose({
         <th>操作</th>
       </tr>
     </thead>
-    <tbody class="text-sm">
+    <tbody>
       <tr
+        class="h-[22px]"
         :class="{
           'text-gray-400': isRootPath,
           'cursor-pointer hover:bg-gray-100': !isRootPath,
-        }" @click="goPrevious"
+        }"
+        @click="goPrevious"
       >
         <td />
         <td>..</td>
+        <td />
         <td />
         <td />
       </tr>
@@ -151,7 +154,7 @@ defineExpose({
         </td>
         <td>{{ file.type === NodeType.Directory ? '目录' : '文件' }}</td>
         <td>{{ formatBytes(file.size) }}</td>
-        <td>
+        <td class="text-[#409eff]">
           <template v-if="file.type === NodeType.File && file.fileData">
             <button v-if="decompressedPath" class="mr-1" @click="openLink(`${decompressedPath}/${file.fileData.remoteName}`)">
               下载
