@@ -352,7 +352,7 @@ onMounted(() => {
               </el-collapse-item>
               <el-collapse-item name="file-list" title="文件列表" class="mb-2 rounded-lg border px-4 shadow-md">
                 <div v-loading="loading.fileList || loading.versionList">
-                  <el-space class="mb-2">
+                  <el-space class="mb-2" wrap>
                     <status-tag title="游戏">
                       {{ fileListState.game }}
                     </status-tag>

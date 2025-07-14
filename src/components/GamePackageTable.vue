@@ -29,10 +29,10 @@ function getFileTotalSize(files: FileInfoWithType[]) {
 
 <template>
   <el-space class="mb-2">
-    <status-tag title="文件总数">
+    <status-tag title="文件数量">
       {{ data.length }}
     </status-tag>
-    <status-tag title="文件总大小">
+    <status-tag title="文件大小">
       {{ getFileTotalSize(data) }}
     </status-tag>
     <el-button size="small" round @click="handleCopyAll">
