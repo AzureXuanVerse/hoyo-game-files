@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { ChunkData, ChunkInfo, FileInfoWithType, FileListState, FileNode, PkgVersionFile, VersionData } from '@/types'
 import { useUrlSearchParams } from '@vueuse/core'
-import { API_BASE, API_BASE_FALLBACK, DEFAULT_GAME, GAME_CONFIG, GITHUB_REPO_URL, VOICEPACK_LIST } from '@/constants'
+import { API_BASE, API_BASE_FALLBACK, DEFAULT_GAME, GAME_CONFIG, GAME_TIP_TEXT, GITHUB_REPO_URL, VOICEPACK_LIST } from '@/constants'
 import { NodeType } from '@/types'
 import { formatBytes, openLink, sortTree } from '@/utils'
 
@@ -310,6 +310,7 @@ onMounted(() => {
         <el-collapse v-model="collapseState">
           <div class="xl:flex xl:gap-4">
             <div class="mb-2 min-w-0 xl:flex-1">
+              <el-alert v-if="GAME_TIP_TEXT[game]" class="mb-2" :title="GAME_TIP_TEXT[game]" type="warning" show-icon :closable="false" />
               <el-collapse-item name="game" title="游戏包" class="mb-2 rounded-lg border px-4 shadow-md">
                 <el-empty
                   v-if="packageList.game.length === 0"

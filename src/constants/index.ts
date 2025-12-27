@@ -37,3 +37,9 @@ export const VOICEPACK_LIST: Record<string, string> = {
   日语: 'Audio_Japanese_pkg_version',
   韩语: 'Audio_Korean_pkg_version',
 }
+
+export const GAME_TIP_TEXT: Record<string, string> = {
+  hk4e: '原神已从 5.6.0 版本开始停止使用 zip 包分发游戏资源，后续版本仅可通过 chunk 获取',
+  hkrpg: '崩坏：星穹铁道已从 3.8.0 版本开始停止使用 zip 包分发游戏资源，后续版本仅可通过 chunk 获取',
+  bh3: '崩坏3已从 8.5.0 版本开始停止使用 zip 包分发游戏资源，后续版本仅可通过 chunk 获取',
+}

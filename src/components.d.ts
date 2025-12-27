@@ -10,6 +10,7 @@ declare module 'vue' {
   export interface GlobalComponents {
     ChunkInfo: typeof import('./components/ChunkInfo.vue')['default']
     CopyAbleText: typeof import('./components/CopyAbleText.vue')['default']
+    ElAlert: typeof import('element-plus/es')['ElAlert']
     ElAside: typeof import('element-plus/es')['ElAside']
     ElBreadcrumb: typeof import('element-plus/es')['ElBreadcrumb']
     ElBreadcrumbItem: typeof import('element-plus/es')['ElBreadcrumbItem']
