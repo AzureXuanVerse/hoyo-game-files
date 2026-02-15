@@ -40,6 +40,6 @@ export const VOICEPACK_LIST: Record<string, string> = {
 
 export const GAME_TIP_TEXT: Record<string, string> = {
   hk4e: '原神已从 5.6.0 版本开始停止使用压缩包分发游戏资源，后续版本仅可通过 chunk 获取',
-  hkrpg: '崩坏：星穹铁道已从 3.8.0 版本开始延迟分发压缩包资源，3.8.0 版本压缩包为更新当天下午 5 点发布',
+  // hkrpg: '崩坏：星穹铁道已从 3.8.0 版本开始延迟分发压缩包资源，3.8.0 版本压缩包为更新当天下午 5 点发布',
   bh3: '崩坏3已从 8.5.0 版本开始停止使用压缩包分发游戏资源，后续版本仅可通过 chunk 获取',
 }
