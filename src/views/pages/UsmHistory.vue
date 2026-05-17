@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import type { VersionEntry } from '@/types'
+import type { GameFileRecord, VersionEntry } from '@/types'
 import { useGameVersions } from '@/api/files'
 import { useUsmHistory } from '@/api/usm'
+import { API_BASE } from '@/constants/core'
+import { useDownloadStore } from '@/store/downloads'
 import { formatBytes } from '@/utils/file'
 import { compareSemver, sortVersions } from '@/utils/semver'
 
@@ -213,6 +215,15 @@ const displayFiles = computed<DisplayFile[]>(() => {
 const selectedFileVersions = computed(() => {
   if (!selectedFile.value)
     return []
+
+  const vData = versionsQuery.data.value ?? {}
+  const allGameVersions = sortedVersionList.value
+
+  const availableVersions = selectedFile.value.versions
+    .filter(v => v.state === 'AVAILABLE')
+    .map(v => v.version)
+    .sort(compareSemver)
+
   let firstAvailSeen = false
   return selectedFile.value.versions.map((entry) => {
     let label: string
@@ -226,12 +237,93 @@ const selectedFileVersions = computed(() => {
     else {
       label = '变更'
     }
-    return { ...entry, label }
+
+    let directDownloadUrl: string | null = null
+    let bestChunkVersion: string | null = null
+
+    if (entry.state === 'AVAILABLE') {
+      const idx = availableVersions.indexOf(entry.version)
+      const nextAvailChange = idx >= 0 && idx + 1 < availableVersions.length
+        ? availableVersions[idx + 1]
+        : null
+      const nextDeletion = selectedFile.value!.versions
+        .filter(v => v.state === 'DELETED' && compareSemver(v.version, entry.version) > 0)
+        .map(v => v.version)
+        .sort(compareSemver)[0] ?? null
+      const nextChange = [nextAvailChange, nextDeletion]
+        .filter((v): v is string => v !== null)
+        .sort(compareSemver)[0] ?? null
+
+      const candidates = allGameVersions.filter((gv) => {
+        if (compareSemver(gv, entry.version) < 0)
+          return false
+        if (nextChange && compareSemver(gv, nextChange) >= 0)
+          return false
+        return true
+      })
+
+      for (let i = candidates.length - 1; i >= 0; i--) {
+        const gv = candidates[i]
+        if (vData[gv]?.decompressed_path) {
+          const base = vData[gv].decompressed_path!.replace(/\/$/, '')
+          directDownloadUrl = `${base}/${selectedFile.value!.path}`
+          break
+        }
+      }
+
+      for (let i = candidates.length - 1; i >= 0; i--) {
+        const gv = candidates[i]
+        if (vData[gv]?.chunk) {
+          bestChunkVersion = gv
+          break
+        }
+      }
+    }
+
+    return { ...entry, label, directDownloadUrl, bestChunkVersion }
   })
 })
 
 function selectFile(file: ProcessedFile) {
   selectedFile.value = selectedFile.value?.path === file.path ? null : file
+}
+
+const downloadStore = useDownloadStore()
+
+const chunkLoadingVersion = ref<string | null>(null)
+
+function onDirectDownload(url: string, filename: string) {
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+}
+
+async function onChunkDownload(chunkVersion: string, entryVersion: string) {
+  if (!selectedFile.value || chunkLoadingVersion.value)
+    return
+  chunkLoadingVersion.value = chunkVersion
+  try {
+    const res = await fetch(`${API_BASE}/chunk/${gameId.value}_${chunkVersion}.json`)
+    if (!res.ok)
+      throw new Error(`${res.status}`)
+    const json = await res.json()
+    const manifests = json.data?.manifests ?? []
+    const entry = selectedFile.value.versions.find(v => v.version === entryVersion)!
+    const file: GameFileRecord = {
+      remoteName: selectedFile.value.path,
+      md5: entry.md5 ?? '',
+      fileSize: entry.size ?? 0,
+    }
+    downloadStore.addChunkFileTask(file, manifests, gameId.value, chunkVersion)
+    downloadStore.openList()
+  }
+  catch {}
+  finally {
+    chunkLoadingVersion.value = null
+  }
 }
 </script>
 
@@ -501,6 +593,33 @@ function selectFile(file: ProcessedFile) {
                         <span class="shrink-0 text-xs text-gray-500 dark:text-gray-400">MD5</span>
                         <span class="truncate font-mono text-xs text-gray-500 dark:text-gray-400">{{ entry.md5 }}</span>
                       </div>
+                    </div>
+                    <div class="mt-2 flex flex-wrap gap-1.5">
+                      <span
+                        v-if="!entry.directDownloadUrl && !entry.bestChunkVersion"
+                        class="text-xs text-gray-400 dark:text-gray-500"
+                      >
+                        无可用资源
+                      </span>
+                      <template v-else>
+                        <button
+                          v-if="entry.directDownloadUrl"
+                          class="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400 dark:hover:bg-blue-900/40"
+                          @click="onDirectDownload(entry.directDownloadUrl, selectedFile!.filename)"
+                        >
+                          <LucideLink class="h-3 w-3" />
+                          直链下载
+                        </button>
+                        <button
+                          v-if="entry.bestChunkVersion"
+                          class="inline-flex items-center gap-1 rounded-md bg-purple-50 px-2 py-1 text-xs font-medium text-purple-600 hover:bg-purple-100 disabled:opacity-50 dark:bg-purple-900/20 dark:text-purple-400 dark:hover:bg-purple-900/40"
+                          :disabled="chunkLoadingVersion === entry.bestChunkVersion"
+                          @click="onChunkDownload(entry.bestChunkVersion, entry.version)"
+                        >
+                          <LucideBoxes class="h-3 w-3" />
+                          {{ chunkLoadingVersion === entry.bestChunkVersion ? '加载中...' : '通过 Chunk 下载' }}
+                        </button>
+                      </template>
                     </div>
                   </template>
                 </div>

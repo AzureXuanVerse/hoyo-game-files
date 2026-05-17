@@ -115,7 +115,7 @@ function navigateTo(pageId: string) {
             v-if="firstChunkVersion"
             class="flex items-start gap-3 rounded-xl border border-purple-200 bg-purple-50 px-4 py-3 dark:border-purple-700/50 dark:bg-purple-900/20"
           >
-            <LucidePackageOpen class="mt-0.5 h-4.5 w-4.5 shrink-0 text-purple-500 dark:text-purple-400" />
+            <LucideBoxes class="mt-0.5 h-4.5 w-4.5 shrink-0 text-purple-500 dark:text-purple-400" />
             <p class="text-sm text-purple-700 dark:text-purple-300">
               从 <span class="font-semibold">{{ firstChunkVersion }}</span> 版本起支持 Chunk 下载
             </p>

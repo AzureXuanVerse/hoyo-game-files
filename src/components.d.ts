@@ -39,6 +39,7 @@ declare module 'vue' {
     LucideHash: typeof import('@lucide/vue')['Hash']
     LucideInbox: typeof import('@lucide/vue')['Inbox']
     LucideLayers: typeof import('@lucide/vue')['Layers']
+    LucideLink: typeof import('@lucide/vue')['Link']
     LucideLoader2: typeof import('@lucide/vue')['Loader2']
     LucideLoaderCircle: typeof import('@lucide/vue')['LoaderCircle']
     LucideMoon: typeof import('@lucide/vue')['Moon']
