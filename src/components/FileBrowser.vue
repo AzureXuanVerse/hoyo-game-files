@@ -1,322 +1,361 @@
 <script setup lang="ts">
-import type { FileNode } from '@/types'
-import { NodeType } from '@/types'
-import { copyToClipboard, formatBytes, openLink } from '@/utils'
+import type { GameFileRecord } from '@/types'
+import { AUDIO_LANG_LABELS } from '@/constants/core'
+import { formatBytes } from '@/utils/file'
 
-const props = defineProps<{
-  decompressedPath: string | null
-  fileTree: FileNode | null
+interface Props {
+  mainFileList: GameFileRecord[]
+  audioFileLists: Map<string, GameFileRecord[]>
+  activeAudioLangs: Set<string>
+  loadingAudioLangs: Set<string>
+  isLoading: boolean
+  error: string | null
+  supportsAudio: boolean
+  decompressedPath?: string | null
+}
+
+const props = defineProps<Props>()
+
+const emit = defineEmits<{
+  load: []
+  toggleAudio: [lang: string]
 }>()
 
-const displayFileNode = ref<FileNode | null>()
-const currentPath = ref('')
-// 视图模式：表格或平铺
-const viewMode = ref<'table' | 'grid'>('table')
-// 搜索关键字（全局匹配）
+const currentPath = ref<string[]>([])
 const searchQuery = ref('')
+const selectedFile = ref<GameFileRecord | null>(null)
 
-const isRootPath = computed(() => currentPath.value === '')
-const breadcrumbItems = computed(() => {
-  const res = currentPath.value.split('/')
-  if (res.length === 1 && res[0] === '')
-    return []
-  return res
+watch(() => props.mainFileList, (newList) => {
+  if (newList.length === 0) {
+    currentPath.value = []
+    searchQuery.value = ''
+    selectedFile.value = null
+  }
 })
 
-// 是否处于搜索状态
-const isSearching = computed(() => searchQuery.value.trim().length > 0)
+const mergedFileList = computed<GameFileRecord[]>(() => {
+  const result = [...props.mainFileList]
+  for (const lang of props.activeAudioLangs) {
+    const list = props.audioFileLists.get(lang)
+    if (list)
+      result.push(...list)
+  }
+  return result
+})
 
-// 展平文件树，生成包含路径的信息，用于搜索
-interface SearchItem {
-  node: FileNode
-  path: string
+const fileStats = computed(() => {
+  if (!mergedFileList.value.length)
+    return null
+  const count = mergedFileList.value.length
+  const totalSize = mergedFileList.value.reduce((s, f) => s + f.fileSize, 0)
+  return { count, totalSize }
+})
+
+function enterFolder(name: string) {
+  currentPath.value = [...currentPath.value, name]
+  selectedFile.value = null
 }
 
-function flattenTree(root: FileNode | null): SearchItem[] {
-  const results: SearchItem[] = []
-  if (!root)
-    return results
-  const stack: { node: FileNode, path: string }[] = [{ node: root, path: '' }]
-  while (stack.length) {
-    const { node, path } = stack.pop()!
-    if (node.type === NodeType.File) {
-      results.push({ node, path })
+function navigateTo(index: number) {
+  currentPath.value = currentPath.value.slice(0, index)
+  selectedFile.value = null
+}
+
+function selectFile(file: GameFileRecord) {
+  selectedFile.value = selectedFile.value?.remoteName === file.remoteName ? null : file
+}
+
+interface FolderStats {
+  directObjectCount: number
+  totalSize: number
+}
+
+const currentDirItems = computed(() => {
+  const prefix = currentPath.value.length ? `${currentPath.value.join('/')}/` : ''
+  const folderStats = new Map<string, FolderStats>()
+  const seenSubfolders = new Map<string, Set<string>>()
+  const files: GameFileRecord[] = []
+
+  for (const file of mergedFileList.value) {
+    if (!file.remoteName.startsWith(prefix))
+      continue
+    const rest = file.remoteName.slice(prefix.length)
+    const slashIdx = rest.indexOf('/')
+    if (slashIdx === -1) {
+      files.push(file)
     }
     else {
-      for (let i = node.children.length - 1; i >= 0; i--) {
-        const child = node.children[i]
-        stack.push({ node: child, path: path ? `${path}/${node.name}` : node.name })
+      const folderName = rest.slice(0, slashIdx)
+      const stats = folderStats.get(folderName) ?? { directObjectCount: 0, totalSize: 0 }
+      const afterFolder = rest.slice(slashIdx + 1)
+      if (!afterFolder.includes('/')) {
+        stats.directObjectCount++
       }
+      else {
+        const subfolderName = afterFolder.slice(0, afterFolder.indexOf('/'))
+        const seen = seenSubfolders.get(folderName) ?? new Set<string>()
+        if (!seen.has(subfolderName)) {
+          seen.add(subfolderName)
+          stats.directObjectCount++
+          seenSubfolders.set(folderName, seen)
+        }
+      }
+      stats.totalSize += file.fileSize
+      folderStats.set(folderName, stats)
     }
   }
-  return results
-}
 
-// 根据搜索关键字过滤结果（大小写不敏感）
-const searchResults = computed(() => {
-  if (!isSearching.value)
-    return [] as SearchItem[]
-  const keyword = searchQuery.value.trim().toLowerCase()
-  return flattenTree(props.fileTree).filter(({ node, path }) => {
-    const nameMatch = node.name.toLowerCase().includes(keyword)
-    const pathMatch = path.toLowerCase().includes(keyword)
-    const remoteNameMatch = node.fileData?.remoteName?.toLowerCase().includes(keyword)
-    return nameMatch || pathMatch || !!remoteNameMatch
-  })
+  return {
+    folders: [...folderStats.keys()].sort((a, b) => a.localeCompare(b)),
+    folderStats,
+    files: files.sort((a, b) => a.remoteName.localeCompare(b.remoteName)),
+  }
 })
 
-function updateDisplayFiles() {
-  if (isRootPath.value) {
-    displayFileNode.value = props.fileTree
-    return
-  }
-  const path = currentPath.value.split('/')
-  if (props.fileTree === null)
-    return
-  let tree = props.fileTree
-  for (let i = 0; i < path.length; i++) {
-    const name = path[i]
-    const child = tree.children.find(child => child.name === name)
-    if (child)
-      tree = child
+const searchResults = computed<GameFileRecord[]>(() => {
+  const q = searchQuery.value.trim().toLowerCase()
+  if (!q)
+    return []
+  return mergedFileList.value.filter(f => f.remoteName.toLowerCase().includes(q))
+})
 
-    else
-      return
-  }
-  displayFileNode.value = tree
-}
-
-function goPrevious() {
-  if (isRootPath.value)
-    return
-  const path = currentPath.value.split('/')
-  path.pop()
-  currentPath.value = path.join('/')
-  updateDisplayFiles()
-}
-
-function goPath(path: string) {
-  currentPath.value = path
-  updateDisplayFiles()
-}
-
-function refresh() {
-  currentPath.value = ''
-  updateDisplayFiles()
-}
-
-function handleClickFile(file: FileNode) {
-  if (file.type === NodeType.Directory) {
-    if (isRootPath.value)
-      currentPath.value = file.name
-    else
-      currentPath.value += `/${file.name}`
-    updateDisplayFiles()
-  }
-}
-
-defineExpose({
-  refresh,
+const fileDownloadUrl = computed(() => {
+  const base = props.decompressedPath
+  if (!base || !selectedFile.value)
+    return null
+  const prefix = base.endsWith('/') ? base : `${base}/`
+  return `${prefix}${selectedFile.value.remoteName}`
 })
 </script>
 
 <template>
-  <!-- 顶部工具栏：搜索 + 视图切换 -->
-  <div class="mb-2 flex flex-wrap items-center gap-2">
-    <el-input
-      v-model="searchQuery"
-      placeholder="搜索文件名/路径"
-      clearable
-      class="w-[240px]"
-      size="small"
-    />
-    <el-radio-group v-model="viewMode" size="small">
-      <el-radio-button label="table">表格</el-radio-button>
-      <el-radio-button label="grid">平铺</el-radio-button>
-    </el-radio-group>
-  </div>
-
-  <!-- 面包屑：仅在非搜索时显示 -->
-  <el-breadcrumb v-if="!isSearching" class="mb-2">
-    <el-breadcrumb-item>
-      <el-button text size="small" class="font-bold" @click="refresh">
-        根目录
-      </el-button>
-    </el-breadcrumb-item>
-    <el-breadcrumb-item v-for="path, index in breadcrumbItems" :key="index">
-      <el-button text size="small" class="font-bold" @click="goPath(currentPath.split('/').slice(0, index + 1).join('/'))">
-        {{ path }}
-      </el-button>
-    </el-breadcrumb-item>
-  </el-breadcrumb>
-
-  <!-- 平铺模式 -->
-  <div v-if="displayFileNode && viewMode === 'grid'" class="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-4">
-    <!-- 返回上级：仅非根且非搜索 -->
-    <div
-      v-if="!isSearching"
-      class="flex h-[72px] cursor-pointer items-center justify-center rounded border text-[#606266] transition-colors hover:bg-gray-100"
-      :class="{ 'text-gray-400': isRootPath }"
-      @click="goPrevious"
-    >
-      ..
-    </div>
-    <div
-      v-for="file in (isSearching ? searchResults : displayFileNode.children)"
-      :key="isSearching ? `${(file as SearchItem).path}/${(file as SearchItem).node.name}` : (file as FileNode).name"
-      class="group rounded border p-2 transition-colors hover:bg-gray-100"
-      :class="{ 'cursor-pointer text-yellow-600': (!isSearching && (file as any).type === NodeType.Directory) }"
-      @click="!isSearching && (file as any).type === NodeType.Directory ? handleClickFile(file as any) : undefined"
-    >
-      <div class="mb-1 text-[#606266]">
-        <template v-if="isSearching">
-          <span class="text-xs text-gray-400">{{ (file as SearchItem).path }}</span>
+  <div class="flex min-h-0 flex-1 overflow-hidden">
+    <div class="flex min-w-0 flex-1 flex-col border-r border-gray-200 dark:border-gray-700">
+      <div class="flex shrink-0 items-center gap-2 border-b border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-700 dark:bg-gray-800/50">
+        <div class="relative flex-1">
+          <LucideSearch class="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+          <input
+            v-model="searchQuery"
+            type="text"
+            placeholder="搜索文件"
+            class="w-full rounded-lg border border-gray-200 bg-white py-1.5 pl-7 pr-3 text-sm text-gray-700 placeholder-gray-400 focus:border-blue-400 focus:outline-none dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:placeholder-gray-500"
+          >
+        </div>
+        <template v-if="supportsAudio">
+          <div class="h-4 w-px bg-gray-200 dark:bg-gray-700" />
+          <button
+            v-for="(label, lang) in AUDIO_LANG_LABELS"
+            :key="lang"
+            class="flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-medium transition-colors focus:outline-none"
+            :class="activeAudioLangs.has(lang)
+              ? 'border-blue-400 bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
+              : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400 dark:hover:text-gray-200'"
+            :disabled="loadingAudioLangs.has(lang)"
+            @click="emit('toggleAudio', lang)"
+          >
+            <LucideLoader2 v-if="loadingAudioLangs.has(lang)" class="h-3 w-3 animate-spin" />
+            <LucideMusic v-else class="h-3 w-3" />
+            {{ label }}
+          </button>
         </template>
       </div>
-      <div class="flex items-center gap-2">
-        <template v-if="(isSearching ? (file as SearchItem).node.type : (file as FileNode).type) === NodeType.Directory">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="inline-block size-5 text-yellow-600">
-            <path d="M3.75 3A1.75 1.75 0 0 0 2 4.75v3.26a3.235 3.235 0 0 1 1.75-.51h12.5c.644 0 1.245.188 1.75.51V6.75A1.75 1.75 0 0 0 16.25 5h-4.836a.25.25 0 0 1-.177-.073L9.823 3.513A1.75 1.75 0 0 0 8.586 3H3.75ZM3.75 9A1.75 1.75 0 0 0 2 10.75v4.5c0 .966.784 1.75 1.75 1.75h12.5A1.75 1.75 0 0 0 18 15.25v-4.5A1.75 1.75 0 0 0 16.25 9H3.75Z" />
-          </svg>
-        </template>
-        <template v-else>
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="inline-block size-5">
-            <path d="M3 3.5A1.5 1.5 0 0 1 4.5 2h6.879a1.5 1.5 0 0 1 1.06.44l4.122 4.12A1.5 1.5 0 0 1 17 7.622V16.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 16.5v-13Z" />
-          </svg>
-        </template>
-        <div class="min-w-0 flex-1">
-          <div class="truncate text-sm text-[#606266]">
-            {{ isSearching ? (file as SearchItem).node.name : (file as FileNode).name }}
+      <div v-if="fileStats" class="flex shrink-0 items-center gap-4 border-b border-gray-200 bg-white px-3 py-1.5 text-xs dark:border-gray-700 dark:bg-gray-900/50">
+        <div class="flex items-center gap-1.5">
+          <LucideFiles class="h-3.5 w-3.5 text-blue-500" />
+          <span class="text-gray-500 dark:text-gray-400">文件总数</span>
+          <span class="font-semibold text-gray-800 dark:text-gray-100">{{ fileStats.count.toLocaleString() }}</span>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <LucideHardDrive class="h-3.5 w-3.5 text-green-500" />
+          <span class="text-gray-500 dark:text-gray-400">总大小</span>
+          <span class="font-semibold text-gray-800 dark:text-gray-100">{{ formatBytes(fileStats.totalSize) }}</span>
+        </div>
+        <div class="hidden sm:block">
+          点击文件可查看详情信息
+        </div>
+      </div>
+
+      <div
+        v-if="isLoading"
+        class="flex flex-1 items-center justify-center text-gray-400 dark:text-gray-500"
+      >
+        <LucideLoader2 class="mr-2 h-5 w-5 animate-spin" />
+        <span>加载文件列表...</span>
+      </div>
+
+      <div
+        v-else-if="error"
+        class="flex flex-1 flex-col items-center justify-center gap-2 text-red-500"
+      >
+        <LucideAlertCircle class="h-6 w-6" />
+        <span class="text-sm">文件列表加载失败</span>
+        <button
+          class="rounded-md border border-red-300 px-3 py-1 text-xs hover:bg-red-50 dark:border-red-700 dark:hover:bg-red-900/20"
+          @click="emit('load')"
+        >
+          重试
+        </button>
+      </div>
+
+      <template v-else-if="mergedFileList.length">
+        <template v-if="searchQuery.trim()">
+          <div class="shrink-0 border-b border-gray-200 px-3 py-1.5 text-xs text-gray-400 dark:border-gray-700 dark:text-gray-500">
+            找到 {{ searchResults.length.toLocaleString() }} 个文件
           </div>
-          <div class="text-xs text-gray-400">
-            <template v-if="isSearching">
-              {{ formatBytes((file as SearchItem).node.size) }}
+          <div class="min-h-0 flex-1 overflow-y-auto">
+            <div
+              v-for="file in searchResults"
+              :key="file.remoteName"
+              class="flex cursor-pointer items-center gap-2 border-b border-gray-100 px-3 py-2 text-sm hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800/60"
+              :class="selectedFile?.remoteName === file.remoteName ? 'bg-blue-50 dark:bg-blue-900/20' : ''"
+              @click="selectFile(file)"
+            >
+              <LucideFile class="h-4 w-4 shrink-0 text-gray-400" />
+              <span class="min-w-0 break-all text-xs text-gray-600 dark:text-gray-300">{{ file.remoteName }}</span>
+              <span class="ml-auto shrink-0 text-xs text-gray-400 dark:text-gray-500">{{ formatBytes(file.fileSize) }}</span>
+            </div>
+            <div v-if="searchResults.length === 0" class="py-8 text-center text-sm text-gray-400 dark:text-gray-500">
+              无匹配文件
+            </div>
+          </div>
+        </template>
+
+        <template v-else>
+          <div class="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-gray-200 px-3 py-1.5 dark:border-gray-700">
+            <button
+              class="shrink-0 text-xs text-blue-500 hover:underline focus:outline-none dark:text-blue-400"
+              @click="navigateTo(0)"
+            >
+              根目录
+            </button>
+            <template v-for="(seg, i) in currentPath" :key="i">
+              <LucideChevronRight class="h-3 w-3 shrink-0 text-gray-400" />
+              <button
+                class="shrink-0 text-xs text-blue-500 hover:underline focus:outline-none dark:text-blue-400"
+                :class="i === currentPath.length - 1 ? 'pointer-events-none text-gray-600 dark:text-gray-300' : ''"
+                @click="navigateTo(i + 1)"
+              >
+                {{ seg }}
+              </button>
             </template>
-            <template v-else>
-              <span v-if="(file as FileNode).type === NodeType.Directory">{{ ((file as FileNode).children.length) }} 项</span>
-              <span v-else>{{ formatBytes((file as FileNode).size) }}</span>
-            </template>
+          </div>
+
+          <div class="min-h-0 flex-1 overflow-y-auto">
+            <div
+              v-for="folder in currentDirItems.folders"
+              :key="`dir-${folder}`"
+              class="flex cursor-pointer items-center gap-2 border-b border-gray-100 px-3 py-2 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800/60"
+              @click="enterFolder(folder)"
+            >
+              <LucideFolder class="h-4 w-4 shrink-0 text-yellow-400" />
+              <span class="text-sm text-gray-700 dark:text-gray-200">{{ folder }}（{{ currentDirItems.folderStats.get(folder)?.directObjectCount }}）</span>
+              <span class="ml-auto shrink-0 text-xs text-gray-400 dark:text-gray-500">
+                {{ formatBytes(currentDirItems.folderStats.get(folder)?.totalSize ?? 0) }}
+              </span>
+            </div>
+            <div
+              v-for="file in currentDirItems.files"
+              :key="`file-${file.remoteName}`"
+              class="flex cursor-pointer items-center gap-2 border-b border-gray-100 px-3 py-2 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800/60"
+              :class="selectedFile?.remoteName === file.remoteName ? 'bg-blue-50 dark:bg-blue-900/20' : ''"
+              @click="selectFile(file)"
+            >
+              <LucideFile class="h-4 w-4 shrink-0 text-gray-400" />
+              <span class="min-w-0 truncate text-sm text-gray-700 dark:text-gray-200">{{ file.remoteName.slice(file.remoteName.lastIndexOf('/') + 1) }}</span>
+              <span class="ml-auto shrink-0 text-xs text-gray-400 dark:text-gray-500">{{ formatBytes(file.fileSize) }}</span>
+            </div>
+            <div
+              v-if="currentDirItems.folders.length === 0 && currentDirItems.files.length === 0"
+              class="py-8 text-center text-sm text-gray-400 dark:text-gray-500"
+            >
+              此目录为空
+            </div>
+          </div>
+        </template>
+      </template>
+
+      <div
+        v-else
+        class="flex flex-1 flex-col items-center justify-center gap-3 text-gray-400 dark:text-gray-500"
+      >
+        <LucideFiles class="h-8 w-8" />
+        <p class="text-sm">
+          尚未加载文件列表
+        </p>
+        <button
+          class="flex items-center gap-1.5 rounded-lg bg-blue-500 px-4 py-2 text-sm text-white hover:bg-blue-600 focus:outline-none dark:bg-blue-600 dark:hover:bg-blue-700"
+          @click="emit('load')"
+        >
+          <LucideDownload class="h-4 w-4" />
+          加载文件列表
+        </button>
+      </div>
+    </div>
+
+    <div
+      v-if="selectedFile"
+      class="fixed inset-0 z-50 flex flex-col border-l border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800 md:relative md:inset-auto md:z-auto md:w-72 md:shrink-0 md:dark:bg-gray-800/30"
+    >
+      <div class="flex items-center justify-between border-b border-gray-200 px-3 py-2 dark:border-gray-700">
+        <span class="text-xs font-medium text-gray-600 dark:text-gray-300">文件详情</span>
+        <button
+          class="rounded p-0.5 text-gray-400 hover:text-gray-600 focus:outline-none dark:hover:text-gray-200"
+          @click="selectedFile = null"
+        >
+          <LucideX class="h-4 w-4" />
+        </button>
+      </div>
+      <div class="min-h-0 flex-1 overflow-y-auto p-3">
+        <div class="space-y-3">
+          <div>
+            <p class="mb-1 text-xs font-medium text-gray-500 dark:text-gray-400">
+              文件路径
+            </p>
+            <p class="break-all text-xs text-gray-700 dark:text-gray-200">
+              {{ selectedFile.remoteName }}
+            </p>
+          </div>
+          <div>
+            <p class="mb-1 text-xs font-medium text-gray-500 dark:text-gray-400">
+              大小
+            </p>
+            <p class="text-sm font-semibold text-gray-800 dark:text-gray-100">
+              {{ formatBytes(selectedFile.fileSize) }}
+            </p>
+            <p class="text-xs text-gray-400 dark:text-gray-500">
+              {{ selectedFile.fileSize.toLocaleString() }} 字节
+            </p>
+          </div>
+          <div>
+            <p class="mb-1 text-xs font-medium text-gray-500 dark:text-gray-400">
+              MD5
+            </p>
+            <p class="break-all font-mono text-xs text-gray-700 dark:text-gray-200">
+              {{ selectedFile.md5 }}
+            </p>
+          </div>
+          <div v-if="selectedFile.hash">
+            <p class="mb-1 text-xs font-medium text-gray-500 dark:text-gray-400">
+              xxHash64
+            </p>
+            <p class="break-all font-mono text-xs text-gray-700 dark:text-gray-200">
+              {{ selectedFile.hash }}
+            </p>
+          </div>
+          <div v-if="fileDownloadUrl">
+            <a
+              :href="fileDownloadUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="flex items-center justify-center gap-1.5 rounded-md bg-green-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-600 focus:outline-none dark:bg-green-600 dark:hover:bg-green-700"
+              :download="selectedFile.remoteName.slice(selectedFile.remoteName.lastIndexOf('/') + 1)"
+            >
+              <LucideDownload class="h-3.5 w-3.5" />
+              直链下载
+            </a>
           </div>
         </div>
       </div>
-      <div class="mt-2 text-right text-xs text-[#409eff]">
-        <template v-if="(isSearching ? (file as SearchItem).node.type : (file as FileNode).type) === NodeType.File">
-          <template v-if="isSearching">
-            <button v-if="props.decompressedPath && (file as SearchItem).node.fileData" class="mr-1" @click.stop="openLink(`${props.decompressedPath}/${(file as SearchItem).node.fileData!.remoteName}`)">下载</button>
-            <button v-if="(file as SearchItem).node.fileData?.md5" class="mr-1" @click.stop="copyToClipboard((file as SearchItem).node.fileData!.md5)">md5</button>
-            <button v-if="(file as SearchItem).node.fileData?.hash" class="mr-1" @click.stop="copyToClipboard((file as SearchItem).node.fileData!.hash!)">hash</button>
-          </template>
-          <template v-else>
-            <button v-if="decompressedPath && (file as FileNode).fileData" class="mr-1" @click.stop="openLink(`${decompressedPath}/${(file as FileNode).fileData!.remoteName}`)">下载</button>
-            <button v-if="(file as FileNode).fileData?.md5" class="mr-1" @click.stop="copyToClipboard((file as FileNode).fileData!.md5)">md5</button>
-            <button v-if="(file as FileNode).fileData?.hash" class="mr-1" @click.stop="copyToClipboard((file as FileNode).fileData!.hash!)">hash</button>
-          </template>
-        </template>
-      </div>
     </div>
   </div>
-
-  <!-- 表格模式（默认） -->
-  <table v-if="displayFileNode && viewMode === 'table'" class="w-full text-xs text-[#606266]">
-    <colgroup>
-      <col class="w-6">
-      <col>
-      <col class="w-10">
-      <col class="w-20">
-      <col class="w-32">
-    </colgroup>
-    <thead>
-      <tr class="text-left text-[#909399]">
-        <th />
-        <th>名称</th>
-        <th>类型</th>
-        <th>大小</th>
-        <th>操作</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr
-        v-if="!isSearching"
-        class="h-[22px]"
-        :class="{
-          'text-gray-400': isRootPath,
-          'cursor-pointer hover:bg-gray-100': !isRootPath,
-        }"
-        @click="goPrevious"
-      >
-        <td />
-        <td>..</td>
-        <td />
-        <td />
-        <td />
-      </tr>
-      <tr
-        v-for="file in (isSearching ? searchResults : displayFileNode.children)"
-        :key="isSearching ? `${(file as SearchItem).path}/${(file as SearchItem).node.name}` : (file as FileNode).name"
-        class="transition-colors hover:bg-gray-100"
-        :class="{
-          'cursor-pointer text-yellow-600': !isSearching && (file as FileNode).type === NodeType.Directory,
-        }"
-        @click="!isSearching ? handleClickFile(file as FileNode) : undefined"
-      >
-        <td>
-          <template v-if="(isSearching ? (file as SearchItem).node.type : (file as FileNode).type) === NodeType.Directory">
-            <svg
-              xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
-              class="inline-block size-5"
-            >
-              <path
-                d="M3.75 3A1.75 1.75 0 0 0 2 4.75v3.26a3.235 3.235 0 0 1 1.75-.51h12.5c.644 0 1.245.188 1.75.51V6.75A1.75 1.75 0 0 0 16.25 5h-4.836a.25.25 0 0 1-.177-.073L9.823 3.513A1.75 1.75 0 0 0 8.586 3H3.75ZM3.75 9A1.75 1.75 0 0 0 2 10.75v4.5c0 .966.784 1.75 1.75 1.75h12.5A1.75 1.75 0 0 0 18 15.25v-4.5A1.75 1.75 0 0 0 16.25 9H3.75Z"
-              />
-            </svg>
-          </template>
-          <template v-else>
-            <svg
-              xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
-              class="inline-block size-5"
-            >
-              <path
-                d="M3 3.5A1.5 1.5 0 0 1 4.5 2h6.879a1.5 1.5 0 0 1 1.06.44l4.122 4.12A1.5 1.5 0 0 1 17 7.622V16.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 16.5v-13Z"
-              />
-            </svg>
-          </template>
-        </td>
-        <td class="truncate">
-          {{ isSearching ? (file as SearchItem).node.name : (file as FileNode).name }}
-          <template v-if="!isSearching && (file as FileNode).type === NodeType.Directory">
-            ({{ (file as FileNode).children.length }})
-          </template>
-          <div v-if="isSearching" class="text-xs text-gray-400">{{ (file as SearchItem).path }}</div>
-        </td>
-        <td>{{ (isSearching ? (file as SearchItem).node.type : (file as FileNode).type) === NodeType.Directory ? '目录' : '文件' }}</td>
-        <td>{{ formatBytes(isSearching ? (file as SearchItem).node.size : (file as FileNode).size) }}</td>
-        <td class="text-[#409eff]">
-          <template v-if="(isSearching ? (file as SearchItem).node.type : (file as FileNode).type) === NodeType.File">
-            <template v-if="isSearching">
-              <button v-if="decompressedPath && (file as SearchItem).node.fileData" class="mr-1" @click.stop="openLink(`${decompressedPath}/${(file as SearchItem).node.fileData!.remoteName}`)">
-                下载
-              </button>
-              <button v-if="(file as SearchItem).node.fileData?.md5" class="mr-1" @click.stop="copyToClipboard((file as SearchItem).node.fileData!.md5)">
-                md5
-              </button>
-              <button v-if="(file as SearchItem).node.fileData?.hash" class="mr-1" @click.stop="copyToClipboard((file as SearchItem).node.fileData!.hash!)">
-                hash
-              </button>
-            </template>
-            <template v-else>
-              <button v-if="decompressedPath && (file as FileNode).fileData" class="mr-1" @click.stop="openLink(`${decompressedPath}/${(file as FileNode).fileData!.remoteName}`)">
-                下载
-              </button>
-              <button v-if="(file as FileNode).fileData?.md5" class="mr-1" @click.stop="copyToClipboard((file as FileNode).fileData!.md5)">
-                md5
-              </button>
-              <button v-if="(file as FileNode).fileData?.hash" class="mr-1" @click.stop="copyToClipboard((file as FileNode).fileData!.hash!)">
-                hash
-              </button>
-            </template>
-          </template>
-        </td>
-      </tr>
-    </tbody>
-  </table>
 </template>

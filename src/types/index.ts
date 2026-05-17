@@ -1,69 +1,34 @@
-export enum NodeType {
-  File = 'file',
-  Directory = 'dir',
-}
-
-export interface PkgVersionFile {
-  remoteName: string
-  md5: string
-  hash?: string
-  fileSize: number
-}
-
-export interface FileNode {
-  type: NodeType
+export interface GameConfig {
+  id: string
   name: string
-  children: FileNode[]
-  size: number
-  fileData?: PkgVersionFile
+  pages: string[]
+  domains: string[]
+  audioLangs?: string[]
 }
 
-export interface FileInfo {
+export interface AppPage {
+  id: string
+  name: string
+  component: () => Promise<unknown>
+}
+
+export interface PkgFile {
   name: string
   url: string
   checksum: string
   size: number
 }
 
-export interface FileInfoWithType extends FileInfo {
-  type: string
+export interface VoiceMap {
+  'zh-cn'?: PkgFile
+  'en-us'?: PkgFile
+  'ja-jp'?: PkgFile
+  'ko-kr'?: PkgFile
 }
 
-export interface VersionData {
-  game: {
-    full?: FileInfo
-    segments: FileInfo[]
-  }
-  voice: {
-    [langKey: string]: FileInfo
-  }
-  update: {
-    [version: string]: {
-      game: FileInfo
-      voice: {
-        [langKey: string]: FileInfo
-      }
-    }
-  }
-  decompressed_path: string | null
-  chunk: ChunkInfo | null
-}
-
-export interface GameConfig {
-  name: string
-  icon: string
-  voice: string[]
-}
-
-export interface FileListState {
-  game: string
-  version: string
-  voice: string[]
-  decompressedPath: string | null
-  tree: FileNode | null
-  displayFileNode?: FileNode
-  count: number
-  size: number
+export interface UpdateEntry {
+  game?: PkgFile
+  voice: VoiceMap
 }
 
 export interface ChunkInfo {
@@ -71,31 +36,71 @@ export interface ChunkInfo {
   package_id: string
   password: string
   tag: string
+  diff_tags?: string[]
 }
 
-export interface ChunkData {
-  build_id: string
-  tag: string
-  manifests: {
-    category_id: string
-    category_name: string
-    manifest: {
-      id: string
-      checksum: string
-      compressed_size: string
-      uncompressed_size: string
-    }
-    chunk_download: {
-      url_prefix: string
-    }
-    manifest_download: {
-      url_prefix: string
-    }
-    stats: {
-      compressed_size: string
-      uncompressed_size: string
-      file_count: string
-      chunk_count: string
-    }
-  }[]
+export interface VersionData {
+  game: {
+    full?: PkgFile
+    segments?: PkgFile[]
+  }
+  voice: VoiceMap
+  update: Record<string, UpdateEntry>
+  decompressed_path: string | null
+  chunk: ChunkInfo | null
+}
+
+export interface ChunkManifestStats {
+  compressed_size: string
+  uncompressed_size: string
+  file_count: string
+  chunk_count: string
+}
+
+export interface ChunkManifest {
+  category_id: string
+  category_name: string
+  manifest: {
+    id: string
+    checksum: string
+    compressed_size: string
+    uncompressed_size: string
+  }
+  chunk_download: {
+    encryption: number
+    password: string
+    compression: number
+    url_prefix: string
+    url_suffix: string
+  }
+  manifest_download: {
+    encryption: number
+    password: string
+    compression: number
+    url_prefix: string
+    url_suffix: string
+  }
+  matching_field: string
+  stats: ChunkManifestStats
+  deduplicated_stats: ChunkManifestStats
+}
+
+export interface GameFileRecord {
+  remoteName: string
+  md5: string
+  hash?: string
+  fileSize: number
+}
+
+export interface VersionEntry {
+  version: string
+  state: 'AVAILABLE' | 'DELETED'
+  md5: string | null
+  size: number | null
+}
+
+export interface FileRecord {
+  filename: string
+  state: 'AVAILABLE' | 'DELETED'
+  versions: VersionEntry[]
 }

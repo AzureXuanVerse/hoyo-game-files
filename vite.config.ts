@@ -1,10 +1,10 @@
 import { Buffer } from 'node:buffer'
 import path from 'node:path'
 import process from 'node:process'
+import tailwindcss from '@tailwindcss/vite'
 import vue from '@vitejs/plugin-vue'
-import AutoImport from 'unplugin-auto-import/vite'
-import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
-import Components from 'unplugin-vue-components/vite'
+import autoImport from 'unplugin-auto-import/vite'
+import components from 'unplugin-vue-components/vite'
 import { defineConfig } from 'vite'
 import simpleHtmlPlugin from 'vite-plugin-simple-html'
 
@@ -17,15 +17,20 @@ export default defineConfig({
   base: './',
   plugins: [
     vue(),
-    AutoImport({
-      imports: ['vue'],
+    tailwindcss(),
+    autoImport({
+      imports: ['vue', 'vue-router'],
       dts: 'src/auto-imports.d.ts',
       vueTemplate: true,
-      resolvers: [ElementPlusResolver()],
     }),
-    Components({
+    components({
       dts: 'src/components.d.ts',
-      resolvers: [ElementPlusResolver()],
+      resolvers: [
+        (name: string) => {
+          if (name.startsWith('Lucide'))
+            return { name: name.slice(6), from: '@lucide/vue' }
+        },
+      ],
     }),
     simpleHtmlPlugin({
       inject: {
