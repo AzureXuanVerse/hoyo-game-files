@@ -104,3 +104,41 @@ export interface FileRecord {
   state: 'AVAILABLE' | 'DELETED'
   versions: VersionEntry[]
 }
+
+export interface ParsedChunk {
+  id: string
+  checksum: string
+  offset: number
+  compressedSize: number
+  uncompressedSize: number
+}
+
+export interface ParsedFile {
+  path: string
+  chunks: ParsedChunk[]
+  isFolder: boolean
+  size: number
+  checksum: string
+}
+
+export interface ParsedManifest {
+  files: ParsedFile[]
+}
+
+export type DownloadStatus
+  = | 'pending'
+    | 'downloading'
+    | 'decompressing'
+    | 'merging'
+    | 'success'
+    | 'failed'
+    | 'cancelled'
+
+export interface DownloadTask {
+  id: string
+  type: 'manifest-json' | 'chunk-file'
+  status: DownloadStatus
+  name: string
+  progress: number
+  error?: string
+}

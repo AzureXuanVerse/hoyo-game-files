@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { GameList } from '@/constants/core'
 import { useAppStore } from '@/store'
+import { useDownloadStore } from '@/store/downloads'
 
 const route = useRoute()
 const router = useRouter()
@@ -16,6 +17,8 @@ function switchGame(gameId: string) {
 function goSettings() {
   router.push('/settings')
 }
+
+const downloadStore = useDownloadStore()
 </script>
 
 <template>
@@ -55,6 +58,24 @@ function goSettings() {
         class="pointer-events-none absolute left-full ml-2 whitespace-nowrap rounded-md bg-gray-800 px-2 py-1 text-xs text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 dark:bg-gray-700"
       >
         {{ store.theme === 'device' ? '跟随设备' : store.theme === 'light' ? '亮色' : '暗色' }}
+      </span>
+    </button>
+
+    <button
+      class="group relative flex h-10 w-10 items-center justify-center rounded-xl text-gray-500 transition-colors hover:bg-gray-200 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-100"
+      :class="downloadStore.isListOpen ? 'bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-100' : ''"
+      title="下载列表"
+      @click="downloadStore.toggleList()"
+    >
+      <LucideDownload class="h-5 w-5" />
+      <span
+        v-if="downloadStore.activeCount > 0"
+        class="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-blue-500 text-[10px] font-bold text-white"
+      >{{ downloadStore.activeCount }}</span>
+      <span
+        class="pointer-events-none absolute left-full ml-2 whitespace-nowrap rounded-md bg-gray-800 px-2 py-1 text-xs text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 dark:bg-gray-700"
+      >
+        下载列表
       </span>
     </button>
 

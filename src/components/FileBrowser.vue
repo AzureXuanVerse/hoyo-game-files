@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { GameFileRecord } from '@/types'
+import type { ChunkManifest, GameFileRecord } from '@/types'
 import { AUDIO_LANG_LABELS } from '@/constants/core'
 import { formatBytes } from '@/utils/file'
 
@@ -12,6 +12,10 @@ interface Props {
   error: string | null
   supportsAudio: boolean
   decompressedPath?: string | null
+  hasChunk?: boolean
+  chunkManifests?: ChunkManifest[]
+  gameId?: string
+  version?: string
 }
 
 const props = defineProps<Props>()
@@ -19,6 +23,7 @@ const props = defineProps<Props>()
 const emit = defineEmits<{
   load: []
   toggleAudio: [lang: string]
+  downloadChunkFile: [file: GameFileRecord]
 }>()
 
 const currentPath = ref<string[]>([])
@@ -353,6 +358,15 @@ const fileDownloadUrl = computed(() => {
               <LucideDownload class="h-3.5 w-3.5" />
               直链下载
             </a>
+          </div>
+          <div v-if="hasChunk">
+            <button
+              class="flex w-full items-center justify-center gap-1.5 rounded-md bg-purple-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-purple-600 focus:outline-none dark:bg-purple-600 dark:hover:bg-purple-700"
+              @click="emit('downloadChunkFile', selectedFile)"
+            >
+              <LucideBoxes class="h-3.5 w-3.5" />
+              通过 Chunk 下载
+            </button>
           </div>
         </div>
       </div>

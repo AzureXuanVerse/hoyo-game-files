@@ -1,17 +1,44 @@
 <script setup lang="ts">
+import type { CacheStats, CacheUnavailable } from '@/utils/idb'
 import { ThemeOptions } from '@/constants/core'
 import { useAppStore } from '@/store'
+import { formatBytes } from '@/utils/file'
+import { clearCache, getCacheStats } from '@/utils/idb'
 
 const store = useAppStore()
+
+type StatsResult = CacheStats | CacheUnavailable | null
+
+const cacheStats = ref<StatsResult>(null)
+const isClearing = ref(false)
+
+async function loadStats() {
+  cacheStats.value = await getCacheStats()
+}
+
+async function handleClearCache() {
+  isClearing.value = true
+  try {
+    await clearCache()
+    await loadStats()
+  }
+  finally {
+    isClearing.value = false
+  }
+}
+
+onMounted(() => {
+  loadStats()
+})
 </script>
 
 <template>
   <div class="flex h-full flex-col items-center justify-center gap-6">
-    <div class="rounded-xl bg-white p-4 shadow-sm dark:bg-gray-800">
+    <div class="w-full max-w-sm rounded-xl bg-white p-4 shadow-sm dark:bg-gray-800">
       <p class="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
         设置
       </p>
-      <div class="flex items-center gap-3">
+      <div class="flex items-center gap-3 justify-between">
         <span class="text-sm text-gray-600 dark:text-gray-300">主题</span>
         <div class="flex items-center gap-1 rounded-lg border border-gray-200 p-0.5 dark:border-gray-600">
           <button
@@ -27,6 +54,36 @@ const store = useAppStore()
             {{ opt.label }}
           </button>
         </div>
+      </div>
+    </div>
+
+    <div class="w-full max-w-sm rounded-xl bg-white p-4 shadow-sm dark:bg-gray-800">
+      <p class="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+        缓存
+      </p>
+      <p v-if="cacheStats && !cacheStats.available" class="text-sm font-medium text-red-500">
+        IndexedDB 不可用
+      </p>
+      <template v-else-if="cacheStats && cacheStats.available">
+        <div class="mb-3 flex items-center justify-between text-sm">
+          <span class="text-gray-600 dark:text-gray-300">Manifest 缓存</span>
+          <span class="font-medium text-gray-800 dark:text-gray-100">
+            {{ formatBytes(cacheStats.totalSize) }}（{{ cacheStats.count }} 条）
+          </span>
+        </div>
+        <button
+          class="flex w-full items-center justify-center gap-1.5 rounded-lg border border-red-200 px-3 py-1.5 text-sm text-red-500 transition-colors hover:bg-red-50 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-800/50 dark:text-red-400 dark:hover:bg-red-900/20"
+          :disabled="isClearing || cacheStats.count === 0"
+          @click="handleClearCache"
+        >
+          <LucideLoader2 v-if="isClearing" class="h-3.5 w-3.5 animate-spin" />
+          <LucideTrash2 v-else class="h-3.5 w-3.5" />
+          {{ isClearing ? '清空中...' : '清空缓存' }}
+        </button>
+      </template>
+      <div v-else class="flex items-center gap-2 text-sm text-gray-400 dark:text-gray-500">
+        <LucideLoader2 class="h-4 w-4 animate-spin" />
+        <span>加载中...</span>
       </div>
     </div>
 

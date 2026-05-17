@@ -1,16 +1,18 @@
 <script setup lang="ts">
-import type { GameFileRecord, VersionData } from '@/types'
+import type { ChunkManifest, GameFileRecord, VersionData } from '@/types'
 import {
   fetchFileList,
   useChunkInfo,
   useGameVersions,
 } from '@/api/files'
 import { AUDIO_LANG_FILES, AUDIO_LANG_LABELS, GameList } from '@/constants/core'
+import { useDownloadStore } from '@/store/downloads'
 import { formatBytes } from '@/utils/file'
 import { compareSemver, sortVersions } from '@/utils/semver'
 
 const route = useRoute()
 const gameId = computed(() => route.params.gameId as string)
+const downloadStore = useDownloadStore()
 
 const versionsQuery = useGameVersions(gameId)
 
@@ -295,6 +297,20 @@ const chunkOnlyBanner = computed(() => {
     return threshold
   return null
 })
+
+function onDownloadManifestJson(manifest: ChunkManifest) {
+  if (!selectedVersion.value)
+    return
+  downloadStore.addManifestJsonTask(manifest, gameId.value, selectedVersion.value)
+  downloadStore.openList()
+}
+
+function onDownloadChunkFile(file: GameFileRecord) {
+  if (!selectedVersion.value || !chunkQuery.data.value?.manifests)
+    return
+  downloadStore.addChunkFileTask(file, chunkQuery.data.value.manifests, gameId.value, selectedVersion.value)
+  downloadStore.openList()
+}
 </script>
 
 <template>
@@ -451,8 +467,13 @@ const chunkOnlyBanner = computed(() => {
         :error="fileLoadError"
         :supports-audio="supportsAudio"
         :decompressed-path="versionData?.decompressed_path ?? null"
+        :has-chunk="hasChunk"
+        :chunk-manifests="chunkQuery.data.value?.manifests ?? []"
+        :game-id="gameId"
+        :version="selectedVersion ?? ''"
         @load="loadMainFileList"
         @toggle-audio="toggleAudioLang"
+        @download-chunk-file="onDownloadChunkFile"
       />
 
       <div
@@ -586,8 +607,8 @@ const chunkOnlyBanner = computed(() => {
                   下载 Manifest
                 </a>
                 <button
-                  disabled
-                  class="flex cursor-not-allowed items-center gap-1 rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-xs text-gray-400 opacity-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-500"
+                  class="flex items-center gap-1 rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-xs text-gray-600 transition-colors hover:bg-gray-100 focus:outline-none dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+                  @click="onDownloadManifestJson(manifest)"
                 >
                   <LucideFileJson class="h-3.5 w-3.5" />
                   下载 Manifest（JSON）

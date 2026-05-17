@@ -24,5 +24,7 @@ const isGameView = computed(() => route.name === 'Game')
         <RouterView />
       </main>
     </div>
+
+    <DownloadList />
   </div>
 </template>

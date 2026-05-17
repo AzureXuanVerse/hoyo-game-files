@@ -138,18 +138,15 @@ const versionStats = computed(() => {
   const ver = selectedVersion.value
   const changedFiles = filteredFiles.value
 
-  // 遍历所有文件，分别计算该版本前后的总大小
   let totalSizeBefore = 0
   let totalSizeAfter = 0
   for (const file of allFiles.value) {
-    // 该版本之前最新的条目，判断当时状态是否为 AVAILABLE
     const beforeEntry = file.versions
       .filter(v => compareSemver(v.version, ver) < 0)
       .at(-1)
     if (beforeEntry?.state === 'AVAILABLE')
       totalSizeBefore += beforeEntry.size ?? 0
 
-    // 该版本及之前最新的条目（用于判断应用本次变更后的状态）
     const atEntry = file.versions
       .filter(v => compareSemver(v.version, ver) <= 0)
       .at(-1)
@@ -397,7 +394,6 @@ function selectFile(file: ProcessedFile) {
                 <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-gray-500 dark:text-gray-400">
                   <span v-if="file.changeType" class="flex items-center">
                     <template v-if="file.changeType === 'changed'">
-                      <!-- <span v-if="file.versionSize != null" class="mr-2">{{ formatBytes(file.versionSize) }}</span> -->
                       <span
                         v-if="file.versionSize != null && file.previousSize != null"
                         class="font-medium"
