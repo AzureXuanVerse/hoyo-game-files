@@ -4,7 +4,7 @@ import { useGameVersions } from '@/api/files'
 import { useUsmHistory } from '@/api/usm'
 import { API_BASE } from '@/constants/core'
 import { useDownloadStore } from '@/store/downloads'
-import { formatBytes } from '@/utils/file'
+import { formatBytes, highlightText } from '@/utils/file'
 import { compareSemver, sortVersions } from '@/utils/semver'
 
 const route = useRoute()
@@ -477,7 +477,8 @@ async function onChunkDownload(chunkVersion: string, entryVersion: string) {
                         : file.changeType === 'deleted' || file.state === 'DELETED'
                           ? 'text-red-600 dark:text-red-400'
                           : 'text-gray-800 dark:text-gray-100'"
-                  >{{ file.filename }}</span>
+                    v-html="highlightText(file.filename, searchQuery)"
+                  />
                   <span
                     v-if="!file.changeType && file.state === 'DELETED'"
                     class="shrink-0 rounded px-1 py-0.5 text-[10px] font-medium leading-none bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400"

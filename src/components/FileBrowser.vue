@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { ChunkManifest, GameFileRecord } from '@/types'
 import { AUDIO_LANG_LABELS } from '@/constants/core'
-import { formatBytes } from '@/utils/file'
+import { formatBytes, highlightText } from '@/utils/file'
 
 interface Props {
   mainFileList: GameFileRecord[]
@@ -216,7 +216,7 @@ const fileDownloadUrl = computed(() => {
               @click="selectFile(file)"
             >
               <LucideFile class="h-4 w-4 shrink-0 text-gray-400" />
-              <span class="min-w-0 break-all text-xs text-gray-600 dark:text-gray-300">{{ file.remoteName }}</span>
+              <span class="min-w-0 break-all text-xs text-gray-600 dark:text-gray-300" v-html="highlightText(file.remoteName, searchQuery)" />
               <span class="ml-auto shrink-0 text-xs text-gray-400 dark:text-gray-500">{{ formatBytes(file.fileSize) }}</span>
             </div>
             <div v-if="searchResults.length === 0" class="py-8 text-center text-sm text-gray-400 dark:text-gray-500">

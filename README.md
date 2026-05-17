@@ -39,6 +39,7 @@
   - 列出游戏文件列表
   - 列出语音包文件列表 
   - 查看 Chunk 信息
+  - 导出 JSON 格式的 Manifest
   - 通过直链下载文件
   - 通过 Chunk 下载文件（需安装 HeaderEditor 拓展并导入规则）
 - USM 文件历史
