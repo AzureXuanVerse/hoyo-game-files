@@ -17,7 +17,6 @@ declare module 'vue' {
     HelpModal: typeof import('./components/HelpModal.vue')['default']
     LucideAlertCircle: typeof import('@lucide/vue')['AlertCircle']
     LucideArrowRight: typeof import('@lucide/vue')['ArrowRight']
-    LucideArrowUpDown: typeof import('@lucide/vue')['ArrowUpDown']
     LucideBoxes: typeof import('@lucide/vue')['Boxes']
     LucideCheck: typeof import('@lucide/vue')['Check']
     LucideCheckCircle2: typeof import('@lucide/vue')['CheckCircle2']

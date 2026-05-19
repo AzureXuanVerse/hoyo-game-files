@@ -25,6 +25,7 @@
 
 - 原神 CN
   - 完整支持
+  - 支持播放/导出 USM 视频
 - 崩坏：星穹铁道 CN
   - 文件列表不支持加载语音包
 - 绝区零 CN
@@ -48,7 +49,11 @@
   - 查看全部版本的 USM 文件历史记录
   - 按照版本查看 USM 文件变更记录
   - 下载 USM 文件的指定版本
-  - 在线播放 USM（无音频，浏览器需支持 VP9 视频解码）
-  - 导出 USM 为 WebM 视频（无音频）
+  - 在线播放 USM（仅原神，无音频，浏览器需支持 VP9 视频解码）
+  - 导出 USM 为 WebM 视频（仅原神，无音频）
 - 亮色 / 暗色 主题切换
 - 移动端适配
+
+## Credits
+
+- src\assets\usm\versions.json 密钥来自 [ToaHartor/GI-cutscenes](https://github.com/ToaHartor/GI-cutscenes) 仓库
