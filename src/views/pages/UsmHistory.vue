@@ -189,7 +189,14 @@ const latestVersionStats = computed(() => {
 })
 
 const searchQuery = ref('')
-const sortMode = ref<'version' | 'name'>('version')
+const sortMode = ref<'name-asc' | 'name-desc' | 'version-asc' | 'version-desc'>('name-asc')
+
+const sortOptions = [
+  { value: 'name-asc', label: '文件名升序' },
+  { value: 'name-desc', label: '文件名降序' },
+  { value: 'version-asc', label: '加入版本升序' },
+  { value: 'version-desc', label: '加入版本降序' },
+]
 
 const displayFiles = computed<DisplayFile[]>(() => {
   const q = searchQuery.value.trim().toLowerCase()
@@ -202,7 +209,7 @@ const displayFiles = computed<DisplayFile[]>(() => {
   if (changeTypeFilter.value) {
     files = files.filter(f => f.changeType === changeTypeFilter.value)
   }
-  if (sortMode.value === 'version') {
+  if (sortMode.value === 'version-asc') {
     return [...files].sort((a, b) => {
       const vCmp = compareSemver(a.addedVersion, b.addedVersion)
       if (vCmp !== 0)
@@ -210,6 +217,16 @@ const displayFiles = computed<DisplayFile[]>(() => {
       return a.filename.localeCompare(b.filename)
     })
   }
+  if (sortMode.value === 'version-desc') {
+    return [...files].sort((a, b) => {
+      const vCmp = compareSemver(b.addedVersion, a.addedVersion)
+      if (vCmp !== 0)
+        return vCmp
+      return a.filename.localeCompare(b.filename)
+    })
+  }
+  if (sortMode.value === 'name-desc')
+    return [...files].sort((a, b) => b.filename.localeCompare(a.filename))
   return [...files].sort((a, b) => a.filename.localeCompare(b.filename))
 })
 
@@ -476,14 +493,10 @@ function onExportWebm(
               v-model="selectedVersion"
               :options="[{ value: null, label: '全部版本' }, ...sortedVersionListDesc.map(ver => ({ value: ver, label: ver }))]"
             />
-            <button
-              class="flex shrink-0 items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs text-gray-600 hover:bg-gray-50 focus:outline-none dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
-              :title="sortMode === 'version' ? '按加入版本排序，点击切换为名称排序' : '按名称排序，点击切换为版本排序'"
-              @click="sortMode = sortMode === 'version' ? 'name' : 'version'"
-            >
-              <LucideArrowUpDown class="h-3.5 w-3.5" />
-              {{ sortMode === 'version' ? '版本' : '名称' }}
-            </button>
+            <DropdownSelect
+              v-model="sortMode"
+              :options="sortOptions"
+            />
             <span class="shrink-0 text-xs text-gray-400 dark:text-gray-500">{{ displayFiles.length.toLocaleString() }} 条记录</span>
           </div>
 
@@ -579,7 +592,7 @@ function onExportWebm(
                   >已删除</span>
                   <span
                     v-if="isFilePlayable(file)"
-                    class="shrink-0 rounded px-1 py-0.5 text-[10px] font-medium leading-none bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400"
+                    class="shrink-0 rounded px-1 py-0.5 text-[10px] font-medium leading-none bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400"
                   >可播放</span>
                 </div>
                 <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-gray-500 dark:text-gray-400">
@@ -694,14 +707,6 @@ function onExportWebm(
                       </div>
                     </div>
                     <div class="mt-2 flex flex-wrap gap-1.5">
-                      <div class="text-xs break-all">
-                        <div>
-                          link: {{ entry.bestLinkVersion }}
-                        </div>
-                        <div>
-                          chunk: {{ entry.bestChunkVersion }}
-                        </div>
-                      </div>
                       <span
                         v-if="!entry.directDownloadUrl && !entry.bestChunkVersion"
                         class="text-xs text-gray-400 dark:text-gray-500"
@@ -732,14 +737,14 @@ function onExportWebm(
                             @click="onPlay(entry.directDownloadUrl, entry.bestChunkVersion)"
                           >
                             <LucidePlay class="h-3 w-3" />
-                            在线播放
+                            在线播放（无音频）
                           </button>
                           <button
                             class="inline-flex items-center gap-1 rounded-md bg-orange-50 px-2 py-1 text-xs font-medium text-orange-600 hover:bg-orange-100 dark:bg-orange-900/20 dark:text-orange-400 dark:hover:bg-orange-900/40"
                             @click="onExportWebm(entry.directDownloadUrl, entry.bestChunkVersion)"
                           >
                             <LucideDownload class="h-3 w-3" />
-                            导出 WebM
+                            导出 WebM（无音频）
                           </button>
                         </template>
                       </template>
