@@ -136,7 +136,7 @@ export type DownloadStatus
 
 export interface DownloadTask {
   id: string
-  type: 'manifest-json' | 'chunk-file'
+  type: 'manifest-json' | 'chunk-file' | 'usm-webm-export'
   status: DownloadStatus
   name: string
   progress: number

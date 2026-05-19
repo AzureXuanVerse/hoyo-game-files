@@ -6,6 +6,7 @@ import { API_BASE } from '@/constants/core'
 import { useDownloadStore } from '@/store/downloads'
 import { formatBytes, highlightText } from '@/utils/file'
 import { compareSemver, sortVersions } from '@/utils/semver'
+import { findUsmKey } from '@/utils/usmDecrypt'
 
 const route = useRoute()
 const gameId = computed(() => route.params.gameId as string)
@@ -212,20 +213,48 @@ const displayFiles = computed<DisplayFile[]>(() => {
   return [...files].sort((a, b) => a.filename.localeCompare(b.filename))
 })
 
+function getEntryCandidates(
+  fileVersions: VersionEntry[],
+  entryVersion: string,
+  availableVersions: string[],
+  allGameVersions: string[],
+): string[] {
+  const idx = availableVersions.indexOf(entryVersion)
+  const nextAvailChange = idx >= 0 && idx + 1 < availableVersions.length
+    ? availableVersions[idx + 1]
+    : null
+  const nextDeletion = fileVersions
+    .filter(v => v.state === 'DELETED' && compareSemver(v.version, entryVersion) > 0)
+    .map(v => v.version)
+    .sort(compareSemver)[0] ?? null
+  const nextChange = [nextAvailChange, nextDeletion]
+    .filter((v): v is string => v !== null)
+    .sort(compareSemver)[0] ?? null
+
+  return allGameVersions.filter((gv) => {
+    if (compareSemver(gv, entryVersion) < 0)
+      return false
+    if (nextChange && compareSemver(gv, nextChange) >= 0)
+      return false
+    return true
+  })
+}
+
 const selectedFileVersions = computed(() => {
   if (!selectedFile.value)
     return []
 
   const vData = versionsQuery.data.value ?? {}
   const allGameVersions = sortedVersionList.value
+  const fileVersions = selectedFile.value.versions
 
-  const availableVersions = selectedFile.value.versions
+  const availableVersions = fileVersions
     .filter(v => v.state === 'AVAILABLE')
     .map(v => v.version)
     .sort(compareSemver)
 
   let firstAvailSeen = false
-  return selectedFile.value.versions.map((entry) => {
+  return fileVersions.map((entry) => {
     let label: string
     if (entry.state === 'DELETED') {
       label = '删除'
@@ -239,48 +268,25 @@ const selectedFileVersions = computed(() => {
     }
 
     let directDownloadUrl: string | null = null
+    let bestLinkVersion: string | null = null
     let bestChunkVersion: string | null = null
 
     if (entry.state === 'AVAILABLE') {
-      const idx = availableVersions.indexOf(entry.version)
-      const nextAvailChange = idx >= 0 && idx + 1 < availableVersions.length
-        ? availableVersions[idx + 1]
-        : null
-      const nextDeletion = selectedFile.value!.versions
-        .filter(v => v.state === 'DELETED' && compareSemver(v.version, entry.version) > 0)
-        .map(v => v.version)
-        .sort(compareSemver)[0] ?? null
-      const nextChange = [nextAvailChange, nextDeletion]
-        .filter((v): v is string => v !== null)
-        .sort(compareSemver)[0] ?? null
-
-      const candidates = allGameVersions.filter((gv) => {
-        if (compareSemver(gv, entry.version) < 0)
-          return false
-        if (nextChange && compareSemver(gv, nextChange) >= 0)
-          return false
-        return true
-      })
-
+      const candidates = getEntryCandidates(fileVersions, entry.version, availableVersions, allGameVersions)
       for (let i = candidates.length - 1; i >= 0; i--) {
         const gv = candidates[i]
-        if (vData[gv]?.decompressed_path) {
-          const base = vData[gv].decompressed_path!.replace(/\/$/, '')
-          directDownloadUrl = `${base}/${selectedFile.value!.path}`
-          break
+        if (!directDownloadUrl && vData[gv]?.decompressed_path) {
+          bestLinkVersion = gv
+          directDownloadUrl = `${vData[gv].decompressed_path!.replace(/\/$/, '')}/${selectedFile.value!.path}`
         }
-      }
-
-      for (let i = candidates.length - 1; i >= 0; i--) {
-        const gv = candidates[i]
-        if (vData[gv]?.chunk) {
+        if (!bestChunkVersion && vData[gv]?.chunk)
           bestChunkVersion = gv
+        if (directDownloadUrl && bestChunkVersion)
           break
-        }
       }
     }
 
-    return { ...entry, label, directDownloadUrl, bestChunkVersion }
+    return { ...entry, label, bestLinkVersion, directDownloadUrl, bestChunkVersion }
   })
 })
 
@@ -291,6 +297,50 @@ function selectFile(file: ProcessedFile) {
 const downloadStore = useDownloadStore()
 
 const chunkLoadingVersion = ref<string | null>(null)
+
+const playableSet = computed<Set<string>>(() => {
+  const set = new Set<string>()
+  const vData = versionsQuery.data.value ?? {}
+  const allGameVersions = sortedVersionList.value
+
+  for (const file of allFiles.value) {
+    const base = file.filename.replace(/\.usm$/i, '')
+    if (findUsmKey(base) === null)
+      continue
+
+    const availableVersions = file.versions
+      .filter(v => v.state === 'AVAILABLE')
+      .map(v => v.version)
+      .sort(compareSemver)
+
+    const hasResource = file.versions.some((entry) => {
+      if (entry.state !== 'AVAILABLE')
+        return false
+      const candidates = getEntryCandidates(file.versions, entry.version, availableVersions, allGameVersions)
+      return candidates.some(gv => vData[gv]?.decompressed_path || vData[gv]?.chunk)
+    })
+
+    if (hasResource)
+      set.add(base)
+  }
+  return set
+})
+
+function isFilePlayable(file: ProcessedFile): boolean {
+  const base = file.filename.replace(/\.usm$/i, '')
+  return playableSet.value.has(base)
+}
+
+interface PlayerState {
+  filename: string
+  keyHex: string
+  directDownloadUrl: string | null
+  bestChunkVersion: string | null
+  gameId: string
+  filePath: string
+}
+
+const playerState = ref<PlayerState | null>(null)
 
 function onDirectDownload(url: string, filename: string) {
   const a = document.createElement('a')
@@ -324,6 +374,50 @@ async function onChunkDownload(chunkVersion: string, entryVersion: string) {
   finally {
     chunkLoadingVersion.value = null
   }
+}
+
+function getEntryKeyHex(filename: string): string | null {
+  const base = filename.replace(/\.usm$/i, '')
+  return findUsmKey(base)
+}
+
+function onPlay(
+  directDownloadUrl: string | null,
+  bestChunkVersion: string | null,
+) {
+  if (!selectedFile.value)
+    return
+  const keyHex = getEntryKeyHex(selectedFile.value.filename)
+  if (!keyHex)
+    return
+  playerState.value = {
+    filename: selectedFile.value.filename,
+    keyHex,
+    directDownloadUrl,
+    bestChunkVersion,
+    gameId: gameId.value,
+    filePath: selectedFile.value.path,
+  }
+}
+
+function onExportWebm(
+  directDownloadUrl: string | null,
+  bestChunkVersion: string | null,
+) {
+  if (!selectedFile.value)
+    return
+  const keyHex = getEntryKeyHex(selectedFile.value.filename)
+  if (!keyHex)
+    return
+  downloadStore.addUsmWebmExportTask({
+    filename: selectedFile.value.filename,
+    filePath: selectedFile.value.path,
+    keyHex,
+    directDownloadUrl,
+    bestChunkVersion,
+    gameId: gameId.value,
+  })
+  downloadStore.openList()
 }
 </script>
 
@@ -483,6 +577,10 @@ async function onChunkDownload(chunkVersion: string, entryVersion: string) {
                     v-if="!file.changeType && file.state === 'DELETED'"
                     class="shrink-0 rounded px-1 py-0.5 text-[10px] font-medium leading-none bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400"
                   >已删除</span>
+                  <span
+                    v-if="isFilePlayable(file)"
+                    class="shrink-0 rounded px-1 py-0.5 text-[10px] font-medium leading-none bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400"
+                  >可播放</span>
                 </div>
                 <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-gray-500 dark:text-gray-400">
                   <span v-if="file.changeType" class="flex items-center">
@@ -596,6 +694,14 @@ async function onChunkDownload(chunkVersion: string, entryVersion: string) {
                       </div>
                     </div>
                     <div class="mt-2 flex flex-wrap gap-1.5">
+                      <div class="text-xs break-all">
+                        <div>
+                          link: {{ entry.bestLinkVersion }}
+                        </div>
+                        <div>
+                          chunk: {{ entry.bestChunkVersion }}
+                        </div>
+                      </div>
                       <span
                         v-if="!entry.directDownloadUrl && !entry.bestChunkVersion"
                         class="text-xs text-gray-400 dark:text-gray-500"
@@ -620,6 +726,22 @@ async function onChunkDownload(chunkVersion: string, entryVersion: string) {
                           <LucideBoxes class="h-3 w-3" />
                           {{ chunkLoadingVersion === entry.bestChunkVersion ? '加载中...' : '通过 Chunk 下载' }}
                         </button>
+                        <template v-if="getEntryKeyHex(selectedFile!.filename)">
+                          <button
+                            class="inline-flex items-center gap-1 rounded-md bg-green-50 px-2 py-1 text-xs font-medium text-green-600 hover:bg-green-100 dark:bg-green-900/20 dark:text-green-400 dark:hover:bg-green-900/40"
+                            @click="onPlay(entry.directDownloadUrl, entry.bestChunkVersion)"
+                          >
+                            <LucidePlay class="h-3 w-3" />
+                            在线播放
+                          </button>
+                          <button
+                            class="inline-flex items-center gap-1 rounded-md bg-orange-50 px-2 py-1 text-xs font-medium text-orange-600 hover:bg-orange-100 dark:bg-orange-900/20 dark:text-orange-400 dark:hover:bg-orange-900/40"
+                            @click="onExportWebm(entry.directDownloadUrl, entry.bestChunkVersion)"
+                          >
+                            <LucideDownload class="h-3 w-3" />
+                            导出 WebM
+                          </button>
+                        </template>
                       </template>
                     </div>
                   </template>
@@ -631,4 +753,15 @@ async function onChunkDownload(chunkVersion: string, entryVersion: string) {
       </div>
     </template>
   </div>
+
+  <UsmPlayerModal
+    v-if="playerState"
+    :filename="playerState.filename"
+    :key-hex="playerState.keyHex"
+    :direct-download-url="playerState.directDownloadUrl"
+    :best-chunk-version="playerState.bestChunkVersion"
+    :game-id="playerState.gameId"
+    :file-path="playerState.filePath"
+    @close="playerState = null"
+  />
 </template>

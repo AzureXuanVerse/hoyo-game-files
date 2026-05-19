@@ -53,7 +53,7 @@ function downloadRules() {
 
         <div class="space-y-4 px-5 py-4">
           <p class="text-sm text-gray-500 dark:text-gray-400">
-            由于浏览器的 CORS 限制，直接下载游戏资源时可能出现 <span class="font-mono text-red-500">Failed to fetch</span> 错误。安装 HeaderEditor 拓展并导入规则可解决此问题。
+            由于浏览器的 CORS 限制，获取数据时可能出现 <span class="font-mono text-red-500">Failed to fetch</span> 错误。安装 HeaderEditor 拓展并导入规则可解决此问题。
           </p>
           <ol class="space-y-4">
             <li class="flex gap-3">

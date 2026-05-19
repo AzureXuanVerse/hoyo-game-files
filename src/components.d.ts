@@ -48,6 +48,7 @@ declare module 'vue' {
     LucidePackage: typeof import('@lucide/vue')['Package']
     LucidePackageOpen: typeof import('@lucide/vue')['PackageOpen']
     LucidePackageX: typeof import('@lucide/vue')['PackageX']
+    LucidePlay: typeof import('@lucide/vue')['Play']
     LucidePlus: typeof import('@lucide/vue')['Plus']
     LucideRefreshCw: typeof import('@lucide/vue')['RefreshCw']
     LucideSearch: typeof import('@lucide/vue')['Search']
@@ -65,5 +66,6 @@ declare module 'vue' {
     SideGameList: typeof import('./components/layout/SideGameList.vue')['default']
     SidePageList: typeof import('./components/layout/SidePageList.vue')['default']
     TagBadge: typeof import('./components/TagBadge.vue')['default']
+    UsmPlayerModal: typeof import('./components/UsmPlayerModal.vue')['default']
   }
 }
