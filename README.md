@@ -19,7 +19,7 @@
 
 米哈游相关游戏资源包与文件列表查看工具
 
-安装 HeaderEditor 拓展并导入规则后，支持通过 Chunk 下载文件
+安装 HeaderEditor 拓展并导入规则后，支持通过 Chunk 下载文件，在线播放 USM 视频（仅原神）
 
 ## 支持游戏
 
@@ -49,11 +49,11 @@
   - 查看全部版本的 USM 文件历史记录
   - 按照版本查看 USM 文件变更记录
   - 下载 USM 文件的指定版本
-  - 在线播放 USM（仅原神，无音频，浏览器需支持 VP9 视频解码）
+  - 在线播放 USM（仅原神，无音频）
   - 导出 USM 为 WebM 视频（仅原神，无音频）
 - 亮色 / 暗色 主题切换
 - 移动端适配
 
 ## Credits
 
-- src\assets\usm\versions.json 密钥来自 [ToaHartor/GI-cutscenes](https://github.com/ToaHartor/GI-cutscenes) 仓库
+- 原神 USM 密钥来自 [ToaHartor/GI-cutscenes](https://github.com/ToaHartor/GI-cutscenes) 仓库

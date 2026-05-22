@@ -2,14 +2,36 @@
 import type { GameFileRecord, VersionEntry } from '@/types'
 import { useGameVersions } from '@/api/files'
 import { useUsmHistory } from '@/api/usm'
-import { API_BASE } from '@/constants/core'
+import { API_BASE, GameList } from '@/constants/core'
 import { useDownloadStore } from '@/store/downloads'
 import { formatBytes, highlightText } from '@/utils/file'
 import { compareSemver, sortVersions } from '@/utils/semver'
-import { findUsmKey } from '@/utils/usmDecrypt'
 
 const route = useRoute()
 const gameId = computed(() => route.params.gameId as string)
+
+const usmDecodeEnabled = computed(() => {
+  const game = GameList.find(g => g.id === gameId.value)
+  return game?.features?.includes('usm-decode') ?? false
+})
+
+const usmKeyMap = ref<Record<string, string> | null>(null)
+
+watch(gameId, async () => {
+  usmKeyMap.value = null
+  if (!usmDecodeEnabled.value)
+    return
+  try {
+    const res = await fetch(`${API_BASE}/usm/${gameId.value}_keys.json`)
+    if (res.ok)
+      usmKeyMap.value = await res.json()
+  }
+  catch {}
+}, { immediate: true })
+
+function findUsmKey(base: string): string | null {
+  return usmKeyMap.value?.[base] ?? null
+}
 
 interface ProcessedFile {
   path: string

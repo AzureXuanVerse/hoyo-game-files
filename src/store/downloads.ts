@@ -2,7 +2,7 @@ import type { ChunkManifest, DownloadStatus, DownloadTask, GameFileRecord, Parse
 import { defineStore } from 'pinia'
 import { API_BASE } from '@/constants/core'
 import { fetchAndParseManifest } from '@/utils/manifest'
-import { decryptUsm } from '@/utils/usmDecrypt'
+import { decryptUsm } from '@/utils/usm'
 
 const MAX_CONCURRENT = 3
 
@@ -202,7 +202,7 @@ export const useDownloadStore = defineStore('downloads', () => {
 
     if (!foundFile) {
       chunkTaskData.delete(task.id)
-      throw new Error('无匹配资源')
+      throw new Error('无可用资源')
     }
 
     if (tasks.value.find(t => t.id === task.id)?.status === 'cancelled')
@@ -374,7 +374,7 @@ export const useDownloadStore = defineStore('downloads', () => {
         }
       }
       if (!foundFile)
-        throw new Error('在 Chunk 清单中未找到目标文件')
+        throw new Error('无可用资源')
 
       const chunks = [...foundFile.chunks].sort((a, b) => a.offset - b.offset)
       const totalChunks = chunks.length

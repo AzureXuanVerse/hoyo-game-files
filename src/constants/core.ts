@@ -8,6 +8,7 @@ export const GameList: GameConfig[] = [
     pages: ['home', 'files', 'usm-history'],
     domains: ['autopatchcn.yuanshen.com'],
     audioLangs: ['zh-cn', 'en-us', 'ja-jp', 'ko-kr'],
+    features: ['usm-decode'],
   },
   {
     id: 'hkrpg',

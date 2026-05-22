@@ -4,6 +4,7 @@ export interface GameConfig {
   pages: string[]
   domains: string[]
   audioLangs?: string[]
+  features?: ('usm-decode')[]
 }
 
 export interface AppPage {

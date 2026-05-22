@@ -2,7 +2,7 @@
 import type { ChunkManifest } from '@/types'
 import { API_BASE } from '@/constants/core'
 import { fetchAndParseManifest } from '@/utils/manifest'
-import { getUsmStreamDecryptor } from '@/utils/usmDecrypt'
+import { getUsmStreamDecryptor } from '@/utils/usm'
 
 interface Props {
   filename: string
