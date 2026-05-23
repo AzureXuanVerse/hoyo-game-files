@@ -18,6 +18,7 @@ const emit = defineEmits<{
 }>()
 
 const show = ref(false)
+const listRef = ref<HTMLUListElement | null>(null)
 
 const selectedLabel = computed(() =>
   props.options.find(o => o.value === props.modelValue)?.label ?? props.placeholder,
@@ -25,8 +26,12 @@ const selectedLabel = computed(() =>
 
 function toggle() {
   show.value = !show.value
-  if (show.value)
+  if (show.value) {
     emit('open')
+    nextTick(() => {
+      listRef.value?.querySelector<HTMLElement>('[data-selected]')?.scrollIntoView({ block: 'nearest' })
+    })
+  }
 }
 
 function select(val: string | null) {
@@ -58,6 +63,7 @@ defineExpose({ close })
     <Transition name="dropdown">
       <ul
         v-show="show"
+        ref="listRef"
         class="absolute left-0 top-full z-50 mt-1 max-h-72 min-w-max overflow-y-auto rounded-xl border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-600 dark:bg-gray-800"
       >
         <li v-for="opt in options" :key="String(opt.value)">
@@ -66,6 +72,7 @@ defineExpose({ close })
             :class="modelValue === opt.value
               ? 'text-blue-600 dark:text-blue-400'
               : 'text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-700'"
+            :data-selected="modelValue === opt.value ? '' : undefined"
             @click="select(opt.value)"
           >
             <slot name="option" :option="opt" :is-selected="modelValue === opt.value">
