@@ -1,6 +1,7 @@
 import type { ChunkManifest, DownloadStatus, DownloadTask, GameFileRecord, ParsedFile } from '@/types'
 import { defineStore } from 'pinia'
 import { API_BASE } from '@/constants/core'
+import { downloadChunks } from '@/utils/chunk'
 import { fetchAndParseManifest } from '@/utils/manifest'
 import { decodeUsm } from '@/utils/usm'
 
@@ -209,34 +210,18 @@ export const useDownloadStore = defineStore('downloads', () => {
       return
 
     const chunks = [...foundFile.chunks].sort((a, b) => a.offset - b.offset)
-    const totalChunks = chunks.length
     const buffers: Uint8Array[] = []
 
     setTaskStatus(task.id, 'downloading')
     setTaskProgress(task.id, 0)
 
-    const { ZSTDDecoder } = await import('zstddec')
-    const dec = new ZSTDDecoder()
-    await dec.init()
-
-    for (let i = 0; i < totalChunks; i++) {
-      if (tasks.value.find(t => t.id === task.id)?.status === 'cancelled')
-        return
-
-      const chunk = chunks[i]
-      const chunkUrl = `${chunkUrlPrefix}/${chunk.id}`
-      const res = await fetch(chunkUrl, { signal: controller.signal })
-      if (!res.ok)
-        throw new Error(`Chunk 下载失败：${res.status}`)
-
-      const compressed = new Uint8Array(await res.arrayBuffer())
-      setTaskStatus(task.id, 'decompressing')
-      const decompressed = dec.decode(compressed, chunk.uncompressedSize)
+    await downloadChunks(chunks, chunkUrlPrefix, controller.signal, (decompressed, i, total) => {
       buffers.push(decompressed)
+      setTaskProgress(task.id, Math.round(((i + 1) / total) * 90))
+    })
 
-      setTaskStatus(task.id, 'downloading')
-      setTaskProgress(task.id, Math.round(((i + 1) / totalChunks) * 90))
-    }
+    if (tasks.value.find(t => t.id === task.id)?.status === 'cancelled')
+      return
 
     setTaskStatus(task.id, 'merging')
 
@@ -377,26 +362,15 @@ export const useDownloadStore = defineStore('downloads', () => {
         throw new Error('无可用资源')
 
       const chunks = [...foundFile.chunks].sort((a, b) => a.offset - b.offset)
-      const totalChunks = chunks.length
       const buffers: Uint8Array[] = []
-      const { ZSTDDecoder } = await import('zstddec')
-      const dec = new ZSTDDecoder()
-      await dec.init()
 
-      for (let i = 0; i < totalChunks; i++) {
-        if (tasks.value.find(t => t.id === task.id)?.status === 'cancelled')
-          return
-        const chunk = chunks[i]
-        const res = await fetch(`${chunkUrlPrefix}/${chunk.id}`, { signal })
-        if (!res.ok)
-          throw new Error(`Chunk 下载失败：${res.status}`)
-        const compressed = new Uint8Array(await res.arrayBuffer())
-        setTaskStatus(task.id, 'decompressing')
-        const decompressed = dec.decode(compressed, chunk.uncompressedSize)
+      await downloadChunks(chunks, chunkUrlPrefix, signal, (decompressed, i, total) => {
         buffers.push(decompressed)
-        setTaskStatus(task.id, 'downloading')
-        setTaskProgress(task.id, Math.round(((i + 1) / totalChunks) * 80))
-      }
+        setTaskProgress(task.id, Math.round(((i + 1) / total) * 80))
+      })
+
+      if (tasks.value.find(t => t.id === task.id)?.status === 'cancelled')
+        return
 
       setTaskStatus(task.id, 'merging')
       const totalSize = buffers.reduce((s, b) => s + b.length, 0)

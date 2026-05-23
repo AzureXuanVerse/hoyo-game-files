@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import type { ChunkManifest } from '@/types'
+import type { ChunkManifest, ParsedChunk } from '@/types'
 import { API_BASE } from '@/constants/core'
+import { downloadChunks } from '@/utils/chunk'
 import { fetchAndParseManifest } from '@/utils/manifest'
 import { getUsmStreamDecoder } from '@/utils/usm'
 
@@ -32,8 +33,16 @@ let mediaSource: MediaSource | null = null
 let objectUrl: string | null = null
 
 let audioCtx: AudioContext | null = null
+let gainNode: GainNode | null = null
 let audioBuffer: AudioBuffer | null = null
 let audioSource: AudioBufferSourceNode | null = null
+
+const audioVolume = ref(Number.parseFloat(localStorage.getItem('usmPlayerVolume') ?? '0.5'))
+watch(audioVolume, (val) => {
+  if (gainNode)
+    gainNode.gain.value = val
+  localStorage.setItem('usmPlayerVolume', String(val))
+})
 
 const audioPcmByChannel = new Map<number, any[]>()
 let streamAudioNodes: AudioBufferSourceNode[] = []
@@ -46,43 +55,154 @@ let videoAudioSyncCleanup: (() => void) | null = null
 
 const SAMPLES_PER_CHUNK = 1024
 const mimeType = 'video/webm; codecs="vp9"'
+const MAX_SOURCE_BUFFER_QUEUE_BYTES = 16 * 1024 * 1024
+const MAX_BUFFER_AHEAD_SECONDS = 18
+const MAX_PAUSED_BUFFER_AHEAD_SECONDS = 45
 
-function makeSourceBufferQueue(sb: SourceBuffer) {
+function makeSourceBufferQueue(sb: SourceBuffer, video: HTMLVideoElement) {
   const queue: Uint8Array[] = []
-  let busy = false
+  const stateWaiters: Array<() => void> = []
+  let queuedBytes = 0
+  let activeOp: 'append' | null = null
+  let retryTimer: ReturnType<typeof setTimeout> | null = null
+  let fatalError: Error | null = null
+
+  function notifyStateChange() {
+    while (stateWaiters.length)
+      stateWaiters.shift()?.()
+  }
+
+  function scheduleRetry() {
+    if (retryTimer !== null)
+      return
+    retryTimer = setTimeout(() => {
+      retryTimer = null
+      notifyStateChange()
+      drain()
+    }, 50)
+  }
+
+  function getBufferedAhead() {
+    const currentTime = video.currentTime
+    const { buffered } = sb
+
+    for (let i = 0; i < buffered.length; i++) {
+      const start = buffered.start(i)
+      const end = buffered.end(i)
+
+      if (end <= currentTime)
+        continue
+      if (start <= currentTime + 0.1)
+        return end - currentTime
+      return end - start
+    }
+
+    return 0
+  }
 
   function drain() {
-    if (busy || !queue.length || sb.updating)
+    if (fatalError || activeOp !== null || sb.updating)
       return
-    busy = true
-    try {
-      sb.appendBuffer(queue.shift() as any)
+
+    if (!queue.length) {
+      notifyStateChange()
+      return
     }
-    catch {
-      busy = false
+
+    activeOp = 'append'
+
+    try {
+      sb.appendBuffer(queue[0] as BufferSource)
+    }
+    catch (error) {
+      activeOp = null
+
+      if (error instanceof DOMException && error.name === 'QuotaExceededError') {
+        scheduleRetry()
+        return
+      }
+
+      fatalError = error instanceof Error ? error : new Error(String(error))
+      notifyStateChange()
     }
   }
 
   sb.addEventListener('updateend', () => {
-    busy = false
+    if (activeOp === 'append') {
+      const appended = queue.shift()
+      if (appended)
+        queuedBytes -= appended.byteLength
+    }
+    activeOp = null
+    notifyStateChange()
     drain()
   })
 
+  async function waitForStateChange(signal: AbortSignal) {
+    if (signal.aborted)
+      return
+
+    await new Promise<void>((resolve) => {
+      let timer: ReturnType<typeof setTimeout>
+      let onStateChange: () => void
+      let onAbort: () => void
+
+      const cleanup = () => {
+        clearTimeout(timer)
+        signal.removeEventListener('abort', onAbort)
+        const index = stateWaiters.indexOf(onStateChange)
+        if (index >= 0)
+          stateWaiters.splice(index, 1)
+      }
+      onStateChange = () => {
+        cleanup()
+        resolve()
+      }
+      onAbort = () => {
+        cleanup()
+        resolve()
+      }
+      timer = setTimeout(() => {
+        cleanup()
+        resolve()
+      }, 120)
+
+      stateWaiters.push(onStateChange)
+      signal.addEventListener('abort', onAbort, { once: true })
+    })
+  }
+
   return {
     append(data: Uint8Array) {
-      queue.push(data.slice())
+      if (fatalError)
+        throw fatalError
+
+      const copy = data.slice()
+      queue.push(copy)
+      queuedBytes += copy.byteLength
       drain()
     },
-    waitDrained(): Promise<void> {
-      return new Promise((resolve) => {
-        const check = () => {
-          if (!busy && queue.length === 0)
-            resolve()
-          else
-            setTimeout(check, 30)
-        }
-        check()
-      })
+    async waitForCapacity(signal: AbortSignal) {
+      while (!signal.aborted) {
+        if (fatalError)
+          throw fatalError
+
+        const maxBufferedAhead = video.paused ? MAX_PAUSED_BUFFER_AHEAD_SECONDS : MAX_BUFFER_AHEAD_SECONDS
+        if (queuedBytes <= MAX_SOURCE_BUFFER_QUEUE_BYTES && getBufferedAhead() < maxBufferedAhead)
+          return
+
+        await waitForStateChange(signal)
+      }
+    },
+    async waitDrained(signal: AbortSignal) {
+      while (!signal.aborted) {
+        if (fatalError)
+          throw fatalError
+        if (activeOp === null && !sb.updating && queue.length === 0 && retryTimer === null)
+          return
+
+        await waitForStateChange(signal)
+      }
     },
   }
 }
@@ -104,7 +224,7 @@ function scheduleOnePcmChunk(chunk: any, idx: number) {
   }
   const src = audioCtx.createBufferSource()
   src.buffer = abuf
-  src.connect(audioCtx.destination)
+  src.connect(gainNode ?? audioCtx.destination)
   src.start(Math.max(t, audioCtx.currentTime))
   streamAudioNodes.push(src)
 }
@@ -114,7 +234,7 @@ function stopAllStreamNodes() {
     try {
       node.stop(0)
     }
-    catch (_) {}
+    catch {}
     node.disconnect()
   }
   streamAudioNodes.length = 0
@@ -168,7 +288,7 @@ function stopAudio() {
     try {
       audioSource.stop()
     }
-    catch (_) {}
+    catch {}
     audioSource.disconnect()
     audioSource = null
   }
@@ -182,7 +302,7 @@ function startAudio(offsetSec: number) {
   stopAudio()
   audioSource = audioCtx.createBufferSource()
   audioSource.buffer = audioBuffer
-  audioSource.connect(audioCtx.destination)
+  audioSource.connect(gainNode ?? audioCtx.destination)
   audioSource.start(0, Math.max(0, offsetSec))
 }
 
@@ -278,6 +398,9 @@ async function startStreaming() {
   }
 
   audioCtx = new AudioContext()
+  gainNode = audioCtx.createGain()
+  gainNode.gain.value = audioVolume.value
+  gainNode.connect(audioCtx.destination)
   streamAudioActive = true
   streamAudioReady = false
   audioPcmByChannel.clear()
@@ -300,7 +423,7 @@ async function startStreaming() {
   })
 
   const sb = mediaSource.addSourceBuffer(mimeType)
-  const sbQueue = makeSourceBufferQueue(sb)
+  const sbQueue = makeSourceBufferQueue(sb, videoRef.value)
 
   phase.value = 'buffering'
   progress.value = 0
@@ -350,7 +473,7 @@ async function startStreaming() {
 
     dec.free()
 
-    await sbQueue.waitDrained()
+    await sbQueue.waitDrained(signal)
 
     if (!signal.aborted && mediaSource.readyState === 'open') {
       mediaSource.endOfStream()
@@ -427,6 +550,8 @@ async function streamDirect(
       sbQueue.append(c)
     for (const chunk of (result.audio_pcm_chunks ?? []))
       feedAudioChunk(chunk)
+
+    await sbQueue.waitForCapacity(signal)
   }
 }
 
@@ -443,7 +568,7 @@ async function streamChunks(
   const manifests: ChunkManifest[] = json.data?.manifests ?? []
 
   let chunkUrlPrefix = ''
-  let foundFile: { chunks: Array<{ id: string, offset: number, uncompressedSize: number }> } | null = null
+  let foundFile: { chunks: ParsedChunk[] } | null = null
 
   for (const m of manifests) {
     if (signal.aborted)
@@ -471,23 +596,8 @@ async function streamChunks(
     throw new Error('无可用资源')
 
   const chunks = [...foundFile.chunks].sort((a, b) => a.offset - b.offset)
-  const total = chunks.length
-  const { ZSTDDecoder } = await import('zstddec')
-  const zstd = new ZSTDDecoder()
-  await zstd.init()
 
-  for (let i = 0; i < total; i++) {
-    if (signal.aborted)
-      return
-
-    const chunk = chunks[i]
-    const chunkRes = await fetch(`${chunkUrlPrefix}/${chunk.id}`, { signal })
-    if (!chunkRes.ok)
-      throw new Error(`Chunk 下载失败：HTTP ${chunkRes.status}`)
-
-    const compressed = new Uint8Array(await chunkRes.arrayBuffer())
-    const decompressed = zstd.decode(compressed, chunk.uncompressedSize)
-
+  await downloadChunks(chunks, chunkUrlPrefix, signal, async (decompressed, i, total) => {
     const result = dec.push(decompressed)
     if (result.init_segment)
       sbQueue.append(result.init_segment as Uint8Array)
@@ -498,7 +608,9 @@ async function streamChunks(
 
     progress.value = Math.min(99, Math.round(((i + 1) / total) * 99))
     progressLabel.value = `Chunk ${i + 1} / ${total}`
-  }
+
+    await sbQueue.waitForCapacity(signal)
+  })
 }
 
 function formatBytes(bytes: number): string {
@@ -525,6 +637,7 @@ function handleClose() {
   if (audioCtx) {
     audioCtx.close()
     audioCtx = null
+    gainNode = null
   }
   if (mediaSource && mediaSource.readyState === 'open') {
     try {
@@ -544,8 +657,10 @@ onUnmounted(() => {
   stopAudio()
   if (videoAudioSyncCleanup)
     videoAudioSyncCleanup()
-  if (audioCtx)
+  if (audioCtx) {
     audioCtx.close()
+    gainNode = null
+  }
   if (objectUrl)
     URL.revokeObjectURL(objectUrl)
 })
@@ -624,9 +739,24 @@ onUnmounted(() => {
                 >
                   通道 {{ ch }}
                 </button>
+                <div class="ml-auto flex items-center gap-2">
+                  <span class="shrink-0 text-xs text-gray-400 dark:text-gray-500">音量</span>
+                  <input
+                    v-model.number="audioVolume"
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    class="h-1 w-24 cursor-pointer accent-blue-500"
+                  >
+                  <span class="w-8 text-right text-xs text-gray-400 dark:text-gray-500">{{ Math.round(audioVolume * 100) }}%</span>
+                </div>
               </div>
               <div v-if="audioStatusText" class="text-xs text-gray-400 dark:text-gray-500">
                 {{ audioStatusText }}
+              </div>
+              <div class="text-xs text-orange-400 dark:text-orange-500">
+                浏览器存在较为严格的视频缓冲限制，拖动进度条后视频有概率出现播放中断或卡顿
               </div>
             </div>
           </template>
