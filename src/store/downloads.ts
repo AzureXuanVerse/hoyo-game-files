@@ -2,7 +2,7 @@ import type { ChunkManifest, DownloadStatus, DownloadTask, GameFileRecord, Parse
 import { defineStore } from 'pinia'
 import { API_BASE } from '@/constants/core'
 import { fetchAndParseManifest } from '@/utils/manifest'
-import { decryptUsm } from '@/utils/usm'
+import { decodeUsm } from '@/utils/usm'
 
 const MAX_CONCURRENT = 3
 
@@ -417,9 +417,12 @@ export const useDownloadStore = defineStore('downloads', () => {
     setTaskStatus(task.id, 'merging')
     setTaskProgress(task.id, 85)
 
-    const webmData = await decryptUsm(usmBytes!, keyHex)
-    const webmFilename = filename.replace(/\.usm$/i, '.webm')
-    triggerDownload(webmFilename, webmData, 'video/webm')
+    const { videoWebm, audioChannels } = await decodeUsm(usmBytes!, keyHex)
+    const baseName = filename.replace(/\.usm$/i, '')
+    triggerDownload(`${baseName}.webm`, videoWebm, 'video/webm')
+    for (const ch of audioChannels) {
+      triggerDownload(`${baseName}_ch${ch.channel}.wav`, ch.wav, 'audio/wav')
+    }
 
     setTaskStatus(task.id, 'success')
     setTaskProgress(task.id, 100)
@@ -435,12 +438,12 @@ export const useDownloadStore = defineStore('downloads', () => {
     gameId: string
   }) {
     const id = makeId()
-    const webmFilename = params.filename.replace(/\.usm$/i, '.webm')
+    const baseName = params.filename.replace(/\.usm$/i, '')
     const task: DownloadTask = {
       id,
       type: 'usm-webm-export',
       status: 'pending',
-      name: `${webmFilename}`,
+      name: `${baseName} (WebM + WAV)`,
       progress: 0,
     }
     webmExportTaskData.set(id, params)

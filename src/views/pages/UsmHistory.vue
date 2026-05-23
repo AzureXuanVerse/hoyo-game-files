@@ -759,14 +759,14 @@ function onExportWebm(
                             @click="onPlay(entry.directDownloadUrl, entry.bestChunkVersion)"
                           >
                             <LucidePlay class="h-3 w-3" />
-                            在线播放（无音频）
+                            在线播放
                           </button>
                           <button
                             class="inline-flex items-center gap-1 rounded-md bg-orange-50 px-2 py-1 text-xs font-medium text-orange-600 hover:bg-orange-100 dark:bg-orange-900/20 dark:text-orange-400 dark:hover:bg-orange-900/40"
                             @click="onExportWebm(entry.directDownloadUrl, entry.bestChunkVersion)"
                           >
                             <LucideDownload class="h-3 w-3" />
-                            导出 WebM（无音频）
+                            导出 WebM + WAV
                           </button>
                         </template>
                       </template>

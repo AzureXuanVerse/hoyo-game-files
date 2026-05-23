@@ -1,7 +1,7 @@
 /* tslint:disable */
 /* eslint-disable */
 
-export class UsmStreamDecryptor {
+export class UsmStreamDecoder {
     free(): void;
     [Symbol.dispose](): void;
     finish(): any;
@@ -9,7 +9,9 @@ export class UsmStreamDecryptor {
     push(data: Uint8Array): any;
 }
 
-export function decrypt_usm(data: Uint8Array, key_hex: string): any;
+export function decode_hca(channels_data: Array<any>, key_hex: string): Uint8Array;
+
+export function decode_usm(data: Uint8Array, key_hex: string): any;
 
 export function init(): void;
 
@@ -17,12 +19,13 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
-    readonly __wbg_usmstreamdecryptor_free: (a: number, b: number) => void;
-    readonly decrypt_usm: (a: number, b: number, c: number, d: number) => [number, number, number];
+    readonly __wbg_usmstreamdecoder_free: (a: number, b: number) => void;
+    readonly decode_hca: (a: any, b: number, c: number) => [number, number, number];
+    readonly decode_usm: (a: number, b: number, c: number, d: number) => [number, number, number];
     readonly init: () => void;
-    readonly usmstreamdecryptor_finish: (a: number) => [number, number, number];
-    readonly usmstreamdecryptor_new: (a: number, b: number) => [number, number, number];
-    readonly usmstreamdecryptor_push: (a: number, b: number, c: number) => [number, number, number];
+    readonly usmstreamdecoder_finish: (a: number) => [number, number, number];
+    readonly usmstreamdecoder_new: (a: number, b: number) => [number, number, number];
+    readonly usmstreamdecoder_push: (a: number, b: number, c: number) => [number, number, number];
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_free: (a: number, b: number, c: number) => void;

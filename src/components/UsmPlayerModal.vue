@@ -2,7 +2,7 @@
 import type { ChunkManifest } from '@/types'
 import { API_BASE } from '@/constants/core'
 import { fetchAndParseManifest } from '@/utils/manifest'
-import { getUsmStreamDecryptor } from '@/utils/usm'
+import { getUsmStreamDecoder } from '@/utils/usm'
 
 interface Props {
   filename: string
@@ -23,10 +23,28 @@ const progress = ref(0)
 const showHelp = ref(false)
 const progressLabel = ref('')
 
+const audioChannelList = ref<number[]>([])
+const currentChannel = ref(0)
+const audioStatusText = ref('')
+
 let abortController: AbortController | null = null
 let mediaSource: MediaSource | null = null
 let objectUrl: string | null = null
 
+let audioCtx: AudioContext | null = null
+let audioBuffer: AudioBuffer | null = null
+let audioSource: AudioBufferSourceNode | null = null
+
+const audioPcmByChannel = new Map<number, any[]>()
+let streamAudioNodes: AudioBufferSourceNode[] = []
+let streamAudioActive = false
+let streamAudioReady = false
+let audioTimeBase = 0
+let pendingPcmChunks: Array<{ chunk: any, idx: number }> = []
+
+let videoAudioSyncCleanup: (() => void) | null = null
+
+const SAMPLES_PER_CHUNK = 1024
 const mimeType = 'video/webm; codecs="vp9"'
 
 function makeSourceBufferQueue(sb: SourceBuffer) {
@@ -69,6 +87,186 @@ function makeSourceBufferQueue(sb: SourceBuffer) {
   }
 }
 
+function scheduleOnePcmChunk(chunk: any, idx: number) {
+  if (!audioCtx)
+    return
+  const sr: number = chunk.sample_rate
+  const nc: number = chunk.channel_count
+  const t = audioTimeBase + idx * SAMPLES_PER_CHUNK / sr
+  if (t + SAMPLES_PER_CHUNK / sr < audioCtx.currentTime - 0.05)
+    return
+  const abuf = audioCtx.createBuffer(nc, SAMPLES_PER_CHUNK, sr)
+  const i16 = new Int16Array(chunk.pcm_i16_bytes.buffer, chunk.pcm_i16_bytes.byteOffset, chunk.pcm_i16_bytes.byteLength / 2)
+  for (let ch = 0; ch < nc; ch++) {
+    const d = abuf.getChannelData(ch)
+    for (let i = 0; i < SAMPLES_PER_CHUNK; i++)
+      d[i] = i16[i * nc + ch] / 32768.0
+  }
+  const src = audioCtx.createBufferSource()
+  src.buffer = abuf
+  src.connect(audioCtx.destination)
+  src.start(Math.max(t, audioCtx.currentTime))
+  streamAudioNodes.push(src)
+}
+
+function stopAllStreamNodes() {
+  for (const node of streamAudioNodes) {
+    try {
+      node.stop(0)
+    }
+    catch (_) {}
+    node.disconnect()
+  }
+  streamAudioNodes.length = 0
+}
+
+function rescheduleStreamAudio() {
+  if (!streamAudioActive || !streamAudioReady || !videoRef.value || !audioCtx)
+    return
+  stopAllStreamNodes()
+  audioTimeBase = audioCtx.currentTime - videoRef.value.currentTime
+  const vt = videoRef.value.currentTime
+  const chunks = audioPcmByChannel.get(currentChannel.value) ?? []
+  for (let i = 0; i < chunks.length; i++) {
+    const sr: number = chunks[i].sample_rate
+    if ((i + 1) * SAMPLES_PER_CHUNK / sr >= vt - 0.05)
+      scheduleOnePcmChunk(chunks[i], i)
+  }
+}
+
+function feedAudioChunk(chunk: any) {
+  const chNo: number = chunk.channel
+  if (!audioPcmByChannel.has(chNo)) {
+    audioPcmByChannel.set(chNo, [])
+    if (!audioChannelList.value.includes(chNo))
+      audioChannelList.value.push(chNo)
+  }
+  const chChunks = audioPcmByChannel.get(chNo)!
+  const idx = chChunks.length
+  chChunks.push(chunk)
+  if (chNo !== currentChannel.value)
+    return
+  if (streamAudioReady)
+    scheduleOnePcmChunk(chunk, idx)
+  else
+    pendingPcmChunks.push({ chunk, idx })
+}
+
+function onStreamVideoPlaying() {
+  if (!streamAudioActive || streamAudioReady || !audioCtx || !videoRef.value)
+    return
+  streamAudioReady = true
+  audioTimeBase = audioCtx.currentTime - videoRef.value.currentTime
+  audioStatusText.value = ''
+  for (const { chunk, idx } of pendingPcmChunks)
+    scheduleOnePcmChunk(chunk, idx)
+  pendingPcmChunks.length = 0
+}
+
+function stopAudio() {
+  if (audioSource) {
+    try {
+      audioSource.stop()
+    }
+    catch (_) {}
+    audioSource.disconnect()
+    audioSource = null
+  }
+}
+
+function startAudio(offsetSec: number) {
+  if (!audioBuffer || !audioCtx)
+    return
+  if (audioCtx.state === 'suspended')
+    audioCtx.resume()
+  stopAudio()
+  audioSource = audioCtx.createBufferSource()
+  audioSource.buffer = audioBuffer
+  audioSource.connect(audioCtx.destination)
+  audioSource.start(0, Math.max(0, offsetSec))
+}
+
+function bindVideoAudioSync(video: HTMLVideoElement) {
+  if (videoAudioSyncCleanup)
+    videoAudioSyncCleanup()
+  const onPlay = () => {
+    if (audioBuffer)
+      startAudio(video.currentTime)
+  }
+  const onPause = () => stopAudio()
+  const onSeeked = () => {
+    if (audioBuffer && !video.paused)
+      startAudio(video.currentTime)
+  }
+  const onEnded = () => stopAudio()
+  video.addEventListener('play', onPlay)
+  video.addEventListener('pause', onPause)
+  video.addEventListener('seeked', onSeeked)
+  video.addEventListener('ended', onEnded)
+  videoAudioSyncCleanup = () => {
+    video.removeEventListener('play', onPlay)
+    video.removeEventListener('pause', onPause)
+    video.removeEventListener('seeked', onSeeked)
+    video.removeEventListener('ended', onEnded)
+  }
+}
+
+function buildAudioBuffer(chNo: number): AudioBuffer | null {
+  if (!audioCtx)
+    return null
+  const chunks = audioPcmByChannel.get(chNo)
+  if (!chunks || chunks.length === 0)
+    return null
+  const sr: number = chunks[0].sample_rate
+  const nc: number = chunks[0].channel_count
+  const totalFrames = chunks.length * SAMPLES_PER_CHUNK
+  try {
+    const buf = audioCtx.createBuffer(nc, totalFrames, sr)
+    let frameOffset = 0
+    for (const chunk of chunks) {
+      const i16 = new Int16Array(chunk.pcm_i16_bytes.buffer, chunk.pcm_i16_bytes.byteOffset, chunk.pcm_i16_bytes.byteLength / 2)
+      for (let ch = 0; ch < nc; ch++) {
+        const channelData = buf.getChannelData(ch)
+        for (let i = 0; i < SAMPLES_PER_CHUNK; i++)
+          channelData[frameOffset + i] = i16[i * nc + ch] / 32768.0
+      }
+      frameOffset += SAMPLES_PER_CHUNK
+    }
+    return buf
+  }
+  catch (e) {
+    console.error('buildAudioBuffer:', e)
+    return null
+  }
+}
+
+function switchChannel(chNo: number) {
+  currentChannel.value = chNo
+  if (streamAudioActive) {
+    if (!streamAudioReady) {
+      pendingPcmChunks.length = 0
+      const newChunks = audioPcmByChannel.get(chNo) ?? []
+      for (let i = 0; i < newChunks.length; i++)
+        pendingPcmChunks.push({ chunk: newChunks[i], idx: i })
+    }
+    else {
+      rescheduleStreamAudio()
+      if (videoRef.value?.paused)
+        audioCtx?.suspend()
+    }
+    return
+  }
+  audioStatusText.value = '音频通道切换中'
+  const buf = buildAudioBuffer(chNo)
+  if (buf) {
+    audioBuffer = buf
+    if (videoRef.value && !videoRef.value.paused)
+      startAudio(videoRef.value.currentTime)
+    const { numberOfChannels, sampleRate, duration } = buf
+    audioStatusText.value = `音频通道 ${chNo}（${numberOfChannels}ch · ${sampleRate} Hz · ${duration.toFixed(1)}s）`
+  }
+}
+
 async function startStreaming() {
   if (!videoRef.value)
     return
@@ -78,6 +276,16 @@ async function startStreaming() {
     errorMsg.value = '当前浏览器不支持 WebM VP9 流式播放（建议使用 Chrome/Edge）'
     return
   }
+
+  audioCtx = new AudioContext()
+  streamAudioActive = true
+  streamAudioReady = false
+  audioPcmByChannel.clear()
+  streamAudioNodes = []
+  pendingPcmChunks = []
+  audioChannelList.value = []
+  currentChannel.value = 0
+  audioStatusText.value = ''
 
   abortController = new AbortController()
   const { signal } = abortController
@@ -97,8 +305,29 @@ async function startStreaming() {
   phase.value = 'buffering'
   progress.value = 0
 
+  const onStreamPause = () => {
+    if (streamAudioActive)
+      audioCtx?.suspend()
+  }
+  const onStreamPlay = () => {
+    if (streamAudioActive)
+      audioCtx?.resume()
+  }
+  const onStreamSeeked = () => {
+    if (!streamAudioActive)
+      return
+    rescheduleStreamAudio()
+    if (videoRef.value?.paused)
+      audioCtx?.suspend()
+  }
+
+  videoRef.value.addEventListener('playing', onStreamVideoPlaying, { once: true })
+  videoRef.value.addEventListener('pause', onStreamPause)
+  videoRef.value.addEventListener('play', onStreamPlay)
+  videoRef.value.addEventListener('seeked', onStreamSeeked)
+
   try {
-    const dec = await getUsmStreamDecryptor(props.keyHex)
+    const dec = await getUsmStreamDecoder(props.keyHex)
 
     if (props.directDownloadUrl) {
       await streamDirect(props.directDownloadUrl, dec, sbQueue, signal)
@@ -116,6 +345,8 @@ async function startStreaming() {
     const finalResult = dec.finish()
     for (const c of finalResult.clusters as Uint8Array[])
       sbQueue.append(c)
+    for (const chunk of (finalResult.audio_pcm_chunks ?? []))
+      feedAudioChunk(chunk)
 
     dec.free()
 
@@ -123,6 +354,28 @@ async function startStreaming() {
 
     if (!signal.aborted && mediaSource.readyState === 'open') {
       mediaSource.endOfStream()
+    }
+
+    streamAudioActive = false
+    videoRef.value?.removeEventListener('playing', onStreamVideoPlaying)
+    videoRef.value?.removeEventListener('pause', onStreamPause)
+    videoRef.value?.removeEventListener('play', onStreamPlay)
+    videoRef.value?.removeEventListener('seeked', onStreamSeeked)
+    stopAllStreamNodes()
+    if (audioCtx.state === 'suspended')
+      audioCtx.resume()
+
+    if (audioPcmByChannel.size > 0) {
+      const buf = buildAudioBuffer(currentChannel.value)
+      if (buf) {
+        audioBuffer = buf
+        if (videoRef.value)
+          bindVideoAudioSync(videoRef.value)
+        if (videoRef.value && !videoRef.value.paused)
+          startAudio(videoRef.value.currentTime)
+        const { numberOfChannels, sampleRate, duration } = buf
+        audioStatusText.value = `音频通道 ${currentChannel.value}（${numberOfChannels}ch · ${sampleRate} Hz · ${duration.toFixed(1)}s）`
+      }
     }
 
     progress.value = 100
@@ -139,7 +392,7 @@ async function startStreaming() {
 
 async function streamDirect(
   url: string,
-  dec: Awaited<ReturnType<typeof getUsmStreamDecryptor>>,
+  dec: Awaited<ReturnType<typeof getUsmStreamDecoder>>,
   sbQueue: ReturnType<typeof makeSourceBufferQueue>,
   signal: AbortSignal,
 ) {
@@ -172,12 +425,14 @@ async function streamDirect(
       sbQueue.append(result.init_segment as Uint8Array)
     for (const c of result.clusters as Uint8Array[])
       sbQueue.append(c)
+    for (const chunk of (result.audio_pcm_chunks ?? []))
+      feedAudioChunk(chunk)
   }
 }
 
 async function streamChunks(
   chunkVersion: string,
-  dec: Awaited<ReturnType<typeof getUsmStreamDecryptor>>,
+  dec: Awaited<ReturnType<typeof getUsmStreamDecoder>>,
   sbQueue: ReturnType<typeof makeSourceBufferQueue>,
   signal: AbortSignal,
 ) {
@@ -238,6 +493,8 @@ async function streamChunks(
       sbQueue.append(result.init_segment as Uint8Array)
     for (const c of result.clusters as Uint8Array[])
       sbQueue.append(c)
+    for (const pcmChunk of (result.audio_pcm_chunks ?? []))
+      feedAudioChunk(pcmChunk)
 
     progress.value = Math.min(99, Math.round(((i + 1) / total) * 99))
     progressLabel.value = `Chunk ${i + 1} / ${total}`
@@ -256,6 +513,19 @@ function formatBytes(bytes: number): string {
 
 function handleClose() {
   abortController?.abort()
+  if (streamAudioActive) {
+    stopAllStreamNodes()
+    streamAudioActive = false
+  }
+  stopAudio()
+  if (videoAudioSyncCleanup) {
+    videoAudioSyncCleanup()
+    videoAudioSyncCleanup = null
+  }
+  if (audioCtx) {
+    audioCtx.close()
+    audioCtx = null
+  }
   if (mediaSource && mediaSource.readyState === 'open') {
     try {
       mediaSource.endOfStream()
@@ -270,6 +540,12 @@ function handleClose() {
 onMounted(() => startStreaming())
 onUnmounted(() => {
   abortController?.abort()
+  stopAllStreamNodes()
+  stopAudio()
+  if (videoAudioSyncCleanup)
+    videoAudioSyncCleanup()
+  if (audioCtx)
+    audioCtx.close()
   if (objectUrl)
     URL.revokeObjectURL(objectUrl)
 })
@@ -334,6 +610,23 @@ onUnmounted(() => {
               <div class="flex items-center justify-between text-xs text-gray-400 dark:text-gray-500">
                 <span>{{ progressLabel || '正在初始化...' }}</span>
                 <span>{{ progress }}%</span>
+              </div>
+              <div v-if="audioChannelList.length > 0" class="flex items-center gap-2 flex-wrap pt-0.5">
+                <span class="text-xs text-gray-400 dark:text-gray-500">音频通道</span>
+                <button
+                  v-for="ch in audioChannelList"
+                  :key="ch"
+                  class="rounded px-2 py-0.5 text-xs font-medium transition-colors"
+                  :class="currentChannel === ch
+                    ? 'bg-blue-500 text-white dark:bg-blue-600'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'"
+                  @click="switchChannel(ch)"
+                >
+                  通道 {{ ch }}
+                </button>
+              </div>
+              <div v-if="audioStatusText" class="text-xs text-gray-400 dark:text-gray-500">
+                {{ audioStatusText }}
               </div>
             </div>
           </template>

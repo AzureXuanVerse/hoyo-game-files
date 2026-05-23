@@ -10,15 +10,28 @@ export async function initWasm(): Promise<void> {
   return wasmInitPromise
 }
 
-export async function getUsmStreamDecryptor(keyHex: string) {
+export async function getUsmStreamDecoder(keyHex: string) {
   await initWasm()
-  const { UsmStreamDecryptor } = await import('@/assets/usm/usm_decoder.js')
-  return new UsmStreamDecryptor(keyHex)
+  const { UsmStreamDecoder } = await import('@/assets/usm/usm_decoder.js')
+  return new UsmStreamDecoder(keyHex)
 }
 
-export async function decryptUsm(data: Uint8Array, keyHex: string): Promise<Uint8Array> {
+export interface UsmAudioChannel {
+  channel: number
+  wav: Uint8Array
+}
+
+export interface DecodeUsmResult {
+  videoWebm: Uint8Array
+  audioChannels: UsmAudioChannel[]
+}
+
+export async function decodeUsm(data: Uint8Array, keyHex: string): Promise<DecodeUsmResult> {
   await initWasm()
-  const { decrypt_usm } = await import('@/assets/usm/usm_decoder.js')
-  const result = decrypt_usm(data, keyHex)
-  return result.video_webm as Uint8Array
+  const { decode_usm } = await import('@/assets/usm/usm_decoder.js')
+  const result = decode_usm(data, keyHex)
+  return {
+    videoWebm: result.video_webm as Uint8Array,
+    audioChannels: (result.audio_channels ?? []) as UsmAudioChannel[],
+  }
 }
