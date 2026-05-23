@@ -31,6 +31,7 @@ declare module 'vue' {
     LucideExternalLink: typeof import('@lucide/vue')['ExternalLink']
     LucideFile: typeof import('@lucide/vue')['File']
     LucideFileJson: typeof import('@lucide/vue')['FileJson']
+    LucideFilePlay: typeof import('@lucide/vue')['FilePlay']
     LucideFiles: typeof import('@lucide/vue')['Files']
     LucideFileVideo: typeof import('@lucide/vue')['FileVideo']
     LucideFolder: typeof import('@lucide/vue')['Folder']

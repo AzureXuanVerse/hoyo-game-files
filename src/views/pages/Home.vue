@@ -43,6 +43,8 @@ const latestHasNoPackage = computed(() => {
   return !hasFull && !hasSegments
 })
 
+const supportUsmDecode = computed(() => currentGame.value?.features?.includes('usm-decode') ?? false)
+
 const firstNoPackageVersion = computed(() => {
   if (!latestHasNoPackage.value || !versionsQuery.data.value)
     return null
@@ -111,6 +113,16 @@ function navigateTo(pageId: string) {
         </div>
 
         <div class="mb-8 space-y-3">
+          <div
+            v-if="supportUsmDecode"
+            class="flex items-start gap-3 rounded-xl border border-green-200 bg-green-50 px-4 py-3 dark:border-green-700/50 dark:bg-green-900/20"
+          >
+            <LucideFilePlay class="mt-0.5 h-4.5 w-4.5 shrink-0 text-green-500 dark:text-green-400" />
+            <p class="text-sm text-green-700 dark:text-green-300">
+              支持在线播放 USM 视频
+            </p>
+          </div>
+
           <div
             v-if="firstChunkVersion"
             class="flex items-start gap-3 rounded-xl border border-purple-200 bg-purple-50 px-4 py-3 dark:border-purple-700/50 dark:bg-purple-900/20"
