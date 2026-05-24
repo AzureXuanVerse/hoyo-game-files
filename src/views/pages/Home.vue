@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Component } from 'vue'
-import { BarChart2, FilePlay, Folder } from '@lucide/vue'
+import { BarChart2, Diff, FilePlay, Folder } from '@lucide/vue'
 import { useGameVersions } from '@/api/files'
 import { GameList, PageList } from '@/constants/core'
 import { sortVersions } from '@/utils/semver'
@@ -67,6 +67,7 @@ const otherPages = computed(() => {
 
 const PAGE_META: Record<string, { desc: string, icon: Component }> = {
   'files': { desc: '浏览各版本的游戏包、游戏文件列表、Chunk信息', icon: Folder },
+  'version-compare': { desc: '对比不同版本之间的文件差异', icon: Diff },
   'usm-history': { desc: '查看 USM 格式视频文件的变更历史记录', icon: FilePlay },
   'stats': { desc: '待开发', icon: BarChart2 },
 }

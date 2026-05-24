@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { ChunkManifest, GameFileRecord, VersionData } from '@/types'
+import type { ChunkManifest, FileBrowserSource, GameFileRecord, VersionData } from '@/types'
 import {
   fetchFileList,
   useChunkInfo,
@@ -99,7 +99,7 @@ const hasPackages = computed(() => {
   const vd = versionData.value
   if (!vd)
     return false
-  return !!(vd.game?.full || (vd.game?.segments?.length) || Object.keys(vd.update ?? {}).length > 0 || Object.keys(vd.voice ?? {}).length > 0)
+  return !!(vd.game?.full || vd.game?.segments?.length || Object.keys(vd.update ?? {}).length > 0 || Object.keys(vd.voice ?? {}).length > 0)
 })
 
 const hasChunk = computed(() => !!versionData.value?.chunk)
@@ -157,18 +157,42 @@ const packageEntries = computed<PackageEntry[]>(() => {
   }
 
   for (const [lang, pkg] of Object.entries(vd.voice ?? {})) {
-    if (pkg)
-      entries.push({ name: pkg.name, url: pkg.url, size: pkg.size, md5: pkg.checksum, label: '语音包', sublabel: AUDIO_LANG_LABELS[lang] ?? lang })
+    if (pkg) {
+      entries.push({
+        name: pkg.name,
+        url: pkg.url,
+        size: pkg.size,
+        md5: pkg.checksum,
+        label: '语音包',
+        sublabel: AUDIO_LANG_LABELS[lang] ?? lang,
+      })
+    }
   }
 
   const updateVersions = sortVersions(Object.keys(vd.update ?? {})).reverse()
   for (const fromVer of updateVersions) {
     const upd = vd.update[fromVer]
-    if (upd?.game)
-      entries.push({ name: upd.game.name, url: upd.game.url, size: upd.game.size, md5: upd.game.checksum, label: '游戏包更新', sublabel: `${fromVer} -> ${selectedVersion.value}` })
+    if (upd?.game) {
+      entries.push({
+        name: upd.game.name,
+        url: upd.game.url,
+        size: upd.game.size,
+        md5: upd.game.checksum,
+        label: '游戏包更新',
+        sublabel: `${fromVer} -> ${selectedVersion.value}`,
+      })
+    }
     for (const [lang, pkg] of Object.entries(upd?.voice ?? {})) {
-      if (pkg)
-        entries.push({ name: pkg.name, url: pkg.url, size: pkg.size, md5: pkg.checksum, label: '语音包更新', sublabel: `${AUDIO_LANG_LABELS[lang] ?? lang} ${fromVer} -> ${selectedVersion.value}` })
+      if (pkg) {
+        entries.push({
+          name: pkg.name,
+          url: pkg.url,
+          size: pkg.size,
+          md5: pkg.checksum,
+          label: '语音包更新',
+          sublabel: `${AUDIO_LANG_LABELS[lang] ?? lang} ${fromVer} -> ${selectedVersion.value}`,
+        })
+      }
     }
   }
 
@@ -193,13 +217,34 @@ async function copyMd5(md5: string, key: string) {
   }, 2000)
 }
 
-const supportsAudio = computed(() => {
+const supportedAudioLangs = computed(() => {
   const game = GameList.find(g => g.id === gameId.value)
-  return !!game?.audioLangs?.length
+  return game?.audioLangs ?? []
 })
 
-async function loadMainFileList() {
+function mergeFiles(mainFiles: GameFileRecord[], audioLists: Map<string, GameFileRecord[]>) {
+  const merged = [...mainFiles]
+  for (const lang of activeAudioLangs.value) {
+    const list = audioLists.get(lang)
+    if (list)
+      merged.push(...list)
+  }
+  return merged
+}
+
+const browserAudioOptions = computed(() => {
+  return supportedAudioLangs.value.map(lang => ({
+    lang,
+    label: AUDIO_LANG_LABELS[lang] ?? lang,
+    active: activeAudioLangs.value.has(lang),
+    loading: loadingAudioLangs.value.has(lang),
+  }))
+})
+
+async function loadMainFileList(force: boolean = false) {
   if (!selectedVersion.value || isLoadingFiles.value)
+    return
+  if (!force && mainFileList.value.length > 0)
     return
   isLoadingFiles.value = true
   fileLoadError.value = null
@@ -221,6 +266,7 @@ async function toggleAudioLang(lang: string) {
     activeAudioLangs.value = active
     return
   }
+
   active.add(lang)
   activeAudioLangs.value = active
 
@@ -239,14 +285,14 @@ async function toggleAudioLang(lang: string) {
     audioFileLists.value = newMap
   }
   catch {
-    const a = new Set(activeAudioLangs.value)
-    a.delete(lang)
-    activeAudioLangs.value = a
+    const next = new Set(activeAudioLangs.value)
+    next.delete(lang)
+    activeAudioLangs.value = next
   }
   finally {
-    const l = new Set(loadingAudioLangs.value)
-    l.delete(lang)
-    loadingAudioLangs.value = l
+    const nextLoading = new Set(loadingAudioLangs.value)
+    nextLoading.delete(lang)
+    loadingAudioLangs.value = nextLoading
   }
 }
 
@@ -305,11 +351,25 @@ function onDownloadManifestJson(manifest: ChunkManifest) {
   downloadStore.openList()
 }
 
-function onDownloadChunkFile(file: GameFileRecord) {
-  if (!selectedVersion.value || !chunkQuery.data.value?.manifests)
+function onDownloadChunkFile(payload: { file: GameFileRecord, version: string }) {
+  if (!selectedVersion.value || payload.version !== selectedVersion.value || !chunkQuery.data.value?.manifests)
     return
-  downloadStore.addChunkFileTask(file, chunkQuery.data.value.manifests, gameId.value, selectedVersion.value)
+  downloadStore.addChunkFileTask(payload.file, chunkQuery.data.value.manifests, gameId.value, selectedVersion.value)
   downloadStore.openList()
+}
+
+const currentFileSource = computed<FileBrowserSource>(() => ({
+  version: selectedVersion.value ?? '',
+  files: mergeFiles(mainFileList.value, audioFileLists.value),
+  isLoading: isLoadingFiles.value,
+  error: fileLoadError.value,
+  decompressedPath: versionData.value?.decompressed_path ?? null,
+  hasChunk: hasChunk.value,
+  audioOptions: browserAudioOptions.value,
+}))
+
+function onBrowserLoad() {
+  loadMainFileList(true)
 }
 </script>
 
@@ -344,7 +404,7 @@ function onDownloadChunkFile(file: GameFileRecord) {
               <span class="font-mono">{{ label }}</span>
             </template>
             <template #option="{ option }">
-              <span class="font-medium font-mono mr-2">{{ option.label }}</span>
+              <span class="mr-2 font-medium font-mono">{{ option.label }}</span>
               <TagBadge
                 v-for="tag in versionTagsMap.get(option.value!)"
                 :key="tag.label"
@@ -408,11 +468,8 @@ function onDownloadChunkFile(file: GameFileRecord) {
                 <div class="flex items-center gap-2">
                   <span class="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">{{ entry.label }}</span>
                   <span v-if="entry.sublabel" class="text-xs text-gray-400 dark:text-gray-500">{{ entry.sublabel }}</span>
-                  <span>
-                    {{ entry.name }}
-                  </span>
+                  <span>{{ entry.name }}</span>
                 </div>
-                <p class="mt-0.5 truncate text-sm text-gray-700 dark:text-gray-200" :title="entry.name" />
                 <div class="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5">
                   <span class="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500">
                     <LucideHardDrive class="h-3 w-3 shrink-0" />
@@ -459,19 +516,8 @@ function onDownloadChunkFile(file: GameFileRecord) {
 
       <FileBrowser
         v-else-if="activeTab === 'files'"
-        :main-file-list="mainFileList"
-        :audio-file-lists="audioFileLists"
-        :active-audio-langs="activeAudioLangs"
-        :loading-audio-langs="loadingAudioLangs"
-        :is-loading="isLoadingFiles"
-        :error="fileLoadError"
-        :supports-audio="supportsAudio"
-        :decompressed-path="versionData?.decompressed_path ?? null"
-        :has-chunk="hasChunk"
-        :chunk-manifests="chunkQuery.data.value?.manifests ?? []"
-        :game-id="gameId"
-        :version="selectedVersion ?? ''"
-        @load="loadMainFileList"
+        :source-a="currentFileSource"
+        @load="onBrowserLoad"
         @toggle-audio="toggleAudioLang"
         @download-chunk-file="onDownloadChunkFile"
       />
@@ -627,6 +673,7 @@ function onDownloadChunkFile(file: GameFileRecord) {
 .dropdown-leave-active {
   transition: opacity 0.1s ease, transform 0.1s ease;
 }
+
 .dropdown-enter-from,
 .dropdown-leave-to {
   opacity: 0;

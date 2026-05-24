@@ -5,7 +5,7 @@ export const GameList: GameConfig[] = [
   {
     id: 'hk4e',
     name: '原神',
-    pages: ['home', 'files', 'usm-history'],
+    pages: ['home', 'files', 'version-compare', 'usm-history'],
     domains: ['autopatchcn.yuanshen.com'],
     audioLangs: ['zh-cn', 'en-us', 'ja-jp', 'ko-kr'],
     features: ['usm-decode'],
@@ -13,20 +13,20 @@ export const GameList: GameConfig[] = [
   {
     id: 'hkrpg',
     name: '崩坏：星穹铁道',
-    pages: ['home', 'files', 'usm-history'],
+    pages: ['home', 'files', 'version-compare', 'usm-history'],
     domains: ['autopatchcn.bhsr.com'],
   },
   {
     id: 'nap',
     name: '绝区零',
-    pages: ['home', 'files', 'usm-history'],
+    pages: ['home', 'files', 'version-compare', 'usm-history'],
     domains: ['autopatchcn.juequling.com'],
     audioLangs: ['zh-cn', 'en-us', 'ja-jp', 'ko-kr'],
   },
   {
     id: 'bh3',
     name: '崩坏3',
-    pages: ['home', 'files'],
+    pages: ['home', 'files', 'version-compare'],
     domains: ['autopatchcn.bh3.com'],
   },
 ]
@@ -34,6 +34,7 @@ export const GameList: GameConfig[] = [
 export const PageList: AppPage[] = [
   { id: 'home', name: '主页', component: () => import('@/views/pages/Home.vue') },
   { id: 'files', name: '文件列表', component: () => import('@/views/pages/Files.vue') },
+  { id: 'version-compare', name: '版本对比', component: () => import('@/views/pages/VersionCompare.vue') },
   { id: 'usm-history', name: 'USM文件历史', component: () => import('@/views/pages/UsmHistory.vue') },
   { id: 'stats', name: '数据统计', component: () => import('@/views/pages/Stats.vue') },
 ]

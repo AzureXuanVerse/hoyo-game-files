@@ -143,3 +143,20 @@ export interface DownloadTask {
   progress: number
   error?: string
 }
+
+export interface FileBrowserAudioOption {
+  lang: string
+  label: string
+  active: boolean
+  loading: boolean
+}
+
+export interface FileBrowserSource {
+  version: string
+  files: GameFileRecord[]
+  isLoading: boolean
+  error: string | null
+  decompressedPath: string | null
+  hasChunk: boolean
+  audioOptions?: FileBrowserAudioOption[]
+}
