@@ -569,8 +569,8 @@ const diffFileInfoPanels = computed<FileInfoPanelItem[]>(() => {
                 :class="folder.diffStats ? `font-medium ${getFolderColor(folder.diffStats)}` : 'text-gray-700 dark:text-gray-200'"
               >
                 {{ folder.name }}
-                <template v-if="folder.normalStats">（{{ folder.normalStats.directObjectCount }}）</template>
               </span>
+              <span v-if="folder.normalStats" class="text-xs text-gray-500 dark:text-gray-400">{{ folder.normalStats.directObjectCount }}</span>
               <div v-if="folder.diffStats" class="ml-1 flex items-center gap-1.5 text-xs">
                 <span v-if="folder.diffStats.added > 0" class="text-green-600 dark:text-green-400">+{{ folder.diffStats.added }}</span>
                 <span v-if="folder.diffStats.changed > 0" class="text-blue-500 dark:text-blue-400">~{{ folder.diffStats.changed }}</span>
