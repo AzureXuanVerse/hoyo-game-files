@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import type { DownloadStatus } from '@/types'
-import { useDownloadStore } from '@/store/downloads'
+import { useDownload } from '@/store/download'
 
-const store = useDownloadStore()
+const download = useDownload()
 
 const STATUS_LABELS: Record<DownloadStatus, string> = {
   pending: '等待中',
@@ -29,7 +29,7 @@ function isActive(status: DownloadStatus) {
 }
 
 const hasCompleted = computed(() =>
-  store.tasks.some(t => t.status === 'success' || t.status === 'failed' || t.status === 'cancelled'),
+  download.tasks.some(t => t.status === 'success' || t.status === 'failed' || t.status === 'cancelled'),
 )
 
 const showHelp = ref(false)
@@ -39,12 +39,12 @@ const showHelp = ref(false)
   <Teleport to="body">
     <Transition name="dl-fade">
       <div
-        v-if="store.isListOpen"
+        v-if="download.isListOpen"
         class="fixed inset-0 z-50 md:inset-auto md:left-20 md:bottom-4 md:z-30 md:w-96"
       >
         <div
           class="absolute inset-0 bg-black/40 md:hidden"
-          @click="store.closeList()"
+          @click="download.closeList()"
         />
 
         <div
@@ -55,19 +55,19 @@ const showHelp = ref(false)
             <LucideDownload class="h-4 w-4 text-blue-500" />
             <span class="flex-1 text-sm font-semibold text-gray-800 dark:text-gray-100">下载列表</span>
             <span
-              v-if="store.activeCount > 0"
+              v-if="download.activeCount > 0"
               class="rounded-full bg-blue-500 px-2 py-0.5 text-xs font-bold text-white"
-            >{{ store.activeCount }}</span>
+            >{{ download.activeCount }}</span>
             <button
               v-if="hasCompleted"
               class="rounded-md px-2 py-1 text-xs text-gray-400 hover:bg-gray-100 hover:text-gray-600 focus:outline-none dark:hover:bg-gray-700 dark:hover:text-gray-200"
-              @click="store.clearCompleted()"
+              @click="download.clearCompleted()"
             >
               清空已完成
             </button>
             <button
               class="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 focus:outline-none dark:hover:bg-gray-700 dark:hover:text-gray-200"
-              @click="store.closeList()"
+              @click="download.closeList()"
             >
               <LucideX class="h-4 w-4" />
             </button>
@@ -75,7 +75,7 @@ const showHelp = ref(false)
 
           <div class="min-h-0 flex-1 overflow-y-auto" role="list">
             <div
-              v-if="store.tasks.length === 0"
+              v-if="download.tasks.length === 0"
               class="flex flex-col items-center justify-center gap-2 py-12 text-gray-400 dark:text-gray-500"
             >
               <LucideInbox class="h-8 w-8" />
@@ -85,7 +85,7 @@ const showHelp = ref(false)
             </div>
 
             <div
-              v-for="task in store.tasks"
+              v-for="task in download.tasks"
               :key="task.id"
               class="border-b border-gray-100 px-4 py-3 dark:border-gray-800"
             >
@@ -129,7 +129,7 @@ const showHelp = ref(false)
                   v-if="isActive(task.status)"
                   class="shrink-0 rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-red-500 focus:outline-none dark:hover:bg-gray-700 dark:hover:text-red-400"
                   title="取消"
-                  @click="store.cancelTask(task.id)"
+                  @click="download.cancelTask(task.id)"
                 >
                   <LucideX class="h-3.5 w-3.5" />
                 </button>

@@ -22,7 +22,7 @@ function triggerDownload(filename: string, data: Uint8Array | string, mimeType: 
   setTimeout(() => URL.revokeObjectURL(url), 30000)
 }
 
-export const useDownloadStore = defineStore('downloads', () => {
+export const useDownload = defineStore('download', () => {
   const tasks = ref<DownloadTask[]>([])
   const isListOpen = ref(false)
   const controllers = new Map<string, AbortController>()
@@ -277,6 +277,7 @@ export const useDownloadStore = defineStore('downloads', () => {
     directDownloadUrl: string | null
     bestChunkVersion: string | null
     gameId: string
+    chIndex?: number
     manifests?: ChunkManifest[]
   }>()
 
@@ -391,7 +392,7 @@ export const useDownloadStore = defineStore('downloads', () => {
     setTaskStatus(task.id, 'merging')
     setTaskProgress(task.id, 85)
 
-    const mkvData = await decodeUsmToMkv(usmBytes!, keyHex)
+    const mkvData = await decodeUsmToMkv(usmBytes!, keyHex, data.chIndex ?? undefined)
     const baseName = filename.replace(/\.usm$/i, '')
     triggerDownload(`${baseName}.mkv`, mkvData, 'video/x-matroska')
 
@@ -407,6 +408,7 @@ export const useDownloadStore = defineStore('downloads', () => {
     directDownloadUrl: string | null
     bestChunkVersion: string | null
     gameId: string
+    chIndex?: number
   }) {
     const id = makeId()
     const baseName = params.filename.replace(/\.usm$/i, '')

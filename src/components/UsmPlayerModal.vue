@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { ChunkManifest, ParsedChunk } from '@/types'
 import { API_BASE, AUDIO_LANG_LABELS, GameList } from '@/constants/core'
+import { useSettings } from '@/store/settings'
 import { downloadChunks } from '@/utils/chunk'
 import { fetchAndParseManifest } from '@/utils/manifest'
 import { getUsmStreamDecoder } from '@/utils/usm'
@@ -37,7 +38,12 @@ let gainNode: GainNode | null = null
 let audioBuffer: AudioBuffer | null = null
 let audioSource: AudioBufferSourceNode | null = null
 
-const audioVolume = ref(Number.parseFloat(localStorage.getItem('usmPlayerVolume') ?? '0.5'))
+const settings = useSettings()
+
+const audioVolume = computed({
+  get: () => settings.usmPlayerVolume,
+  set: (val: number) => { settings.usmPlayerVolume = val },
+})
 
 function getChannelLabel(ch: number): string {
   const langs = GameList.find(g => g.id === props.gameId)?.audioLangs ?? []
@@ -46,8 +52,19 @@ function getChannelLabel(ch: number): string {
 watch(audioVolume, (val) => {
   if (gainNode)
     gainNode.gain.value = val
-  localStorage.setItem('usmPlayerVolume', String(val))
 })
+
+let hasAutoSwitched = false
+watch(audioChannelList, (channels) => {
+  if (hasAutoSwitched || channels.length === 0)
+    return
+  const langs = GameList.find(g => g.id === props.gameId)?.audioLangs ?? []
+  const prefIdx = langs.indexOf(settings.usmDefaultAudioLang)
+  if (prefIdx >= 0 && channels.includes(prefIdx)) {
+    switchChannel(prefIdx)
+    hasAutoSwitched = true
+  }
+}, { deep: true })
 
 const audioPcmByChannel = new Map<number, any[]>()
 let streamAudioNodes: AudioBufferSourceNode[] = []
@@ -414,6 +431,7 @@ async function startStreaming() {
   audioChannelList.value = []
   currentChannel.value = 0
   audioStatusText.value = ''
+  hasAutoSwitched = false
 
   abortController = new AbortController()
   const { signal } = abortController

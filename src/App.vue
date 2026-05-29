@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { useAppStore } from '@/store'
+import { useSettings } from '@/store/settings'
 
-const store = useAppStore()
 const route = useRoute()
+const settings = useSettings()
 
 onMounted(() => {
-  store.initTheme()
+  settings.initTheme()
 })
 
 const isGameView = computed(() => route.name === 'Game')

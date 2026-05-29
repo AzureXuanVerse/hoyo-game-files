@@ -1,11 +1,27 @@
 <script setup lang="ts">
+import type { MkvExportLang, UsmAudioLang } from '@/store/settings'
 import type { CacheStats, CacheUnavailable } from '@/utils/idb'
-import { ThemeOptions } from '@/constants/core'
-import { useAppStore } from '@/store'
+import { AUDIO_LANG_LABELS, ThemeOptions } from '@/constants/core'
+import { useSettings } from '@/store/settings'
 import { formatBytes } from '@/utils/file'
 import { clearCache, getCacheStats } from '@/utils/idb'
 
-const store = useAppStore()
+const settings = useSettings()
+
+const usmAudioLangOptions: { value: UsmAudioLang, label: string }[] = [
+  { value: 'zh-cn', label: AUDIO_LANG_LABELS['zh-cn'] },
+  { value: 'en-us', label: AUDIO_LANG_LABELS['en-us'] },
+  { value: 'ja-jp', label: AUDIO_LANG_LABELS['ja-jp'] },
+  { value: 'ko-kr', label: AUDIO_LANG_LABELS['ko-kr'] },
+]
+
+const mkvExportLangOptions: { value: MkvExportLang, label: string }[] = [
+  { value: 'all', label: '全部' },
+  { value: 'zh-cn', label: AUDIO_LANG_LABELS['zh-cn'] },
+  { value: 'en-us', label: AUDIO_LANG_LABELS['en-us'] },
+  { value: 'ja-jp', label: AUDIO_LANG_LABELS['ja-jp'] },
+  { value: 'ko-kr', label: AUDIO_LANG_LABELS['ko-kr'] },
+]
 
 type StatsResult = CacheStats | CacheUnavailable | null
 
@@ -33,7 +49,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="flex h-full flex-col items-center justify-center gap-6">
+  <div class="flex min-h-full flex-col items-center justify-center gap-3 py-6">
     <div class="w-full max-w-sm rounded-xl bg-white p-4 shadow-sm dark:bg-gray-800">
       <p class="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
         设置
@@ -45,10 +61,10 @@ onMounted(() => {
             v-for="opt in ThemeOptions"
             :key="opt.value"
             class="flex items-center gap-1.5 rounded-md px-2.5 py-1 text-sm transition-colors focus:outline-none"
-            :class="store.theme === opt.value
+            :class="settings.theme === opt.value
               ? 'bg-gray-100 font-medium text-gray-800 dark:bg-gray-700 dark:text-gray-100'
               : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'"
-            @click="store.setTheme(opt.value)"
+            @click="settings.setTheme(opt.value)"
           >
             <component :is="opt.icon" class="h-3.5 w-3.5" />
             {{ opt.label }}
@@ -59,7 +75,27 @@ onMounted(() => {
 
     <div class="w-full max-w-sm rounded-xl bg-white p-4 shadow-sm dark:bg-gray-800">
       <p class="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
-        缓存
+        USM 播放
+      </p>
+      <div class="flex items-center gap-3 justify-between">
+        <span class="text-sm text-gray-600 dark:text-gray-300">默认音频语言</span>
+        <DropdownSelect v-model="settings.usmDefaultAudioLang" :options="usmAudioLangOptions" />
+      </div>
+    </div>
+
+    <div class="w-full max-w-sm rounded-xl bg-white p-4 shadow-sm dark:bg-gray-800">
+      <p class="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+        MKV 导出
+      </p>
+      <div class="flex items-center gap-3 justify-between">
+        <span class="text-sm text-gray-600 dark:text-gray-300">默认导出语言</span>
+        <DropdownSelect v-model="settings.mkvExportLang" :options="mkvExportLangOptions" />
+      </div>
+    </div>
+
+    <div class="w-full max-w-sm rounded-xl bg-white p-4 shadow-sm dark:bg-gray-800">
+      <p class="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+        缓存管理
       </p>
       <p v-if="cacheStats && !cacheStats.available" class="text-sm font-medium text-red-500">
         IndexedDB 不可用

@@ -1,11 +1,16 @@
 import { defineStore } from 'pinia'
 
-type Theme = 'device' | 'light' | 'dark'
+export type Theme = 'device' | 'light' | 'dark'
+export type UsmAudioLang = 'zh-cn' | 'en-us' | 'ja-jp' | 'ko-kr'
+export type MkvExportLang = 'all' | UsmAudioLang
 
-export const useAppStore = defineStore('app', () => {
+export const useSettings = defineStore('settings', () => {
   const theme = ref<Theme>('device')
-  const isDark = ref(false)
+  const usmPlayerVolume = ref(0.5)
+  const usmDefaultAudioLang = ref<UsmAudioLang>('zh-cn')
+  const mkvExportLang = ref<MkvExportLang>('all')
 
+  const isDark = ref(false)
   const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
 
   function updateIsDark() {
@@ -24,26 +29,24 @@ export const useAppStore = defineStore('app', () => {
   }
 
   function initTheme() {
-    const saved = localStorage.getItem('theme') as Theme | null
-    theme.value = saved && ['device', 'light', 'dark'].includes(saved) ? saved : 'device'
     updateIsDark()
     applyTheme()
     mediaQuery.addEventListener('change', onSystemChange)
+  }
+
+  function setTheme(t: Theme) {
+    theme.value = t
+    updateIsDark()
+    applyTheme()
   }
 
   function cycleTheme() {
     setTheme(isDark.value ? 'light' : 'dark')
   }
 
-  function setTheme(t: Theme) {
-    theme.value = t
-    if (t === 'device')
-      localStorage.removeItem('theme')
-    else
-      localStorage.setItem('theme', t)
-    updateIsDark()
-    applyTheme()
-  }
-
-  return { theme, isDark, initTheme, setTheme, cycleTheme }
+  return { theme, isDark, usmPlayerVolume, usmDefaultAudioLang, mkvExportLang, initTheme, setTheme, cycleTheme }
+}, {
+  persist: {
+    pick: ['theme', 'usmPlayerVolume', 'usmDefaultAudioLang', 'mkvExportLang'],
+  },
 })

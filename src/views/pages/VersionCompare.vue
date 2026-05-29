@@ -2,12 +2,12 @@
 import type { ChunkManifest, FileBrowserSource, GameFileRecord, VersionData } from '@/types'
 import { fetchChunkInfo, fetchFileList, useGameVersions } from '@/api/files'
 import { AUDIO_LANG_FILES, AUDIO_LANG_LABELS, GameList } from '@/constants/core'
-import { useDownloadStore } from '@/store/downloads'
+import { useDownload } from '@/store/download'
 import { sortVersions } from '@/utils/semver'
 
 const route = useRoute()
 const gameId = computed(() => route.params.gameId as string)
-const downloadStore = useDownloadStore()
+const download = useDownload()
 
 const versionsQuery = useGameVersions(gameId)
 
@@ -267,8 +267,8 @@ async function getChunkManifests(version: string) {
 
 async function onDownloadChunkFile(payload: { file: GameFileRecord, version: string }) {
   const manifests = await getChunkManifests(payload.version)
-  downloadStore.addChunkFileTask(payload.file, manifests, gameId.value, payload.version)
-  downloadStore.openList()
+  download.addChunkFileTask(payload.file, manifests, gameId.value, payload.version)
+  download.openList()
 }
 
 function buildDiffSource(version: string | null): FileBrowserSource | null {

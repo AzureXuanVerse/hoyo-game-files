@@ -3,7 +3,8 @@ import type { GameFileRecord, VersionEntry } from '@/types'
 import { useGameVersions } from '@/api/files'
 import { useUsmHistory } from '@/api/usm'
 import { API_BASE, GameList } from '@/constants/core'
-import { useDownloadStore } from '@/store/downloads'
+import { useDownload } from '@/store/download'
+import { useSettings } from '@/store/settings'
 import { formatBytes, highlightText } from '@/utils/file'
 import { compareSemver, sortVersions } from '@/utils/semver'
 
@@ -333,7 +334,8 @@ function selectFile(file: ProcessedFile) {
   selectedFile.value = selectedFile.value?.path === file.path ? null : file
 }
 
-const downloadStore = useDownloadStore()
+const download = useDownload()
+const settings = useSettings()
 
 const chunkLoadingVersion = ref<string | null>(null)
 
@@ -406,8 +408,8 @@ async function onChunkDownload(chunkVersion: string, entryVersion: string) {
       md5: entry.md5 ?? '',
       fileSize: entry.size ?? 0,
     }
-    downloadStore.addChunkFileTask(file, manifests, gameId.value, chunkVersion)
-    downloadStore.openList()
+    download.addChunkFileTask(file, manifests, gameId.value, chunkVersion)
+    download.openList()
   }
   catch {}
   finally {
@@ -448,15 +450,20 @@ function onExportMkv(
   const keyHex = getEntryKeyHex(selectedFile.value.filename)
   if (!keyHex)
     return
-  downloadStore.addUsmMkvExportTask({
+  const prefLang = settings.mkvExportLang
+  const gameAudioLangs = GameList.find(g => g.id === gameId.value)?.audioLangs ?? []
+  const prefIdx = prefLang === 'all' ? -1 : gameAudioLangs.indexOf(prefLang)
+  const chIndex = prefIdx >= 0 ? prefIdx : undefined
+  download.addUsmMkvExportTask({
     filename: selectedFile.value.filename,
     filePath: selectedFile.value.path,
     keyHex,
     directDownloadUrl,
     bestChunkVersion,
     gameId: gameId.value,
+    chIndex,
   })
-  downloadStore.openList()
+  download.openList()
 }
 </script>
 

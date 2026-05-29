@@ -6,13 +6,13 @@ import {
   useGameVersions,
 } from '@/api/files'
 import { AUDIO_LANG_FILES, AUDIO_LANG_LABELS, GameList } from '@/constants/core'
-import { useDownloadStore } from '@/store/downloads'
+import { useDownload } from '@/store/download'
 import { formatBytes } from '@/utils/file'
 import { compareSemver, sortVersions } from '@/utils/semver'
 
 const route = useRoute()
 const gameId = computed(() => route.params.gameId as string)
-const downloadStore = useDownloadStore()
+const download = useDownload()
 
 const versionsQuery = useGameVersions(gameId)
 
@@ -347,15 +347,15 @@ const chunkOnlyBanner = computed(() => {
 function onDownloadManifestJson(manifest: ChunkManifest) {
   if (!selectedVersion.value)
     return
-  downloadStore.addManifestJsonTask(manifest, gameId.value, selectedVersion.value)
-  downloadStore.openList()
+  download.addManifestJsonTask(manifest, gameId.value, selectedVersion.value)
+  download.openList()
 }
 
 function onDownloadChunkFile(payload: { file: GameFileRecord, version: string }) {
   if (!selectedVersion.value || payload.version !== selectedVersion.value || !chunkQuery.data.value?.manifests)
     return
-  downloadStore.addChunkFileTask(payload.file, chunkQuery.data.value.manifests, gameId.value, selectedVersion.value)
-  downloadStore.openList()
+  download.addChunkFileTask(payload.file, chunkQuery.data.value.manifests, gameId.value, selectedVersion.value)
+  download.openList()
 }
 
 const currentFileSource = computed<FileBrowserSource>(() => ({

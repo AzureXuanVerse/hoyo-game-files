@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import type DropdownSelect from '@/components/DropdownSelect.vue'
 import { GameList, PageList } from '@/constants/core'
-import { useAppStore } from '@/store'
-import { useDownloadStore } from '@/store/downloads'
+import { useDownload } from '@/store/download'
+import { useSettings } from '@/store/settings'
 
 const route = useRoute()
 const router = useRouter()
-const store = useAppStore()
-const downloadStore = useDownloadStore()
+const settings = useSettings()
+const download = useDownload()
 
 const currentGameId = computed(() => route.params.gameId as string)
 const currentPageId = computed(() => route.params.pageId as string)
@@ -77,22 +77,22 @@ function selectPage(pageId: string | null) {
       <button
         class="flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
         title="切换主题模式"
-        @click="store.cycleTheme()"
+        @click="settings.cycleTheme()"
       >
-        <LucideSun v-if="!store.isDark" class="h-4.5 w-4.5" />
+        <LucideSun v-if="!settings.isDark" class="h-4.5 w-4.5" />
         <LucideMoon v-else class="h-4.5 w-4.5" />
       </button>
 
       <button
         class="relative flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
         title="下载列表"
-        @click="downloadStore.toggleList()"
+        @click="download.toggleList()"
       >
         <LucideDownload class="h-4.5 w-4.5" />
         <span
-          v-if="downloadStore.activeCount > 0"
+          v-if="download.activeCount > 0"
           class="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-blue-500 text-[10px] font-bold text-white"
-        >{{ downloadStore.activeCount }}</span>
+        >{{ download.activeCount }}</span>
       </button>
 
       <button
