@@ -388,7 +388,7 @@ function onBrowserLoad() {
       class="flex h-full items-center justify-center text-red-500"
     >
       <LucideAlertCircle class="mr-2 h-5 w-5" />
-      <span>版本列表加载失败，请重试</span>
+      <span>加载失败</span>
     </div>
 
     <template v-else>
@@ -657,7 +657,7 @@ function onBrowserLoad() {
                   @click="onDownloadManifestJson(manifest)"
                 >
                   <LucideFileJson class="h-3.5 w-3.5" />
-                  下载 Manifest（JSON）
+                  导出为 JSON
                 </button>
               </div>
             </div>
