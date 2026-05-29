@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { ChunkManifest, ParsedChunk } from '@/types'
-import { API_BASE } from '@/constants/core'
+import { API_BASE, AUDIO_LANG_LABELS, GameList } from '@/constants/core'
 import { downloadChunks } from '@/utils/chunk'
 import { fetchAndParseManifest } from '@/utils/manifest'
 import { getUsmStreamDecoder } from '@/utils/usm'
@@ -38,6 +38,11 @@ let audioBuffer: AudioBuffer | null = null
 let audioSource: AudioBufferSourceNode | null = null
 
 const audioVolume = ref(Number.parseFloat(localStorage.getItem('usmPlayerVolume') ?? '0.5'))
+
+function getChannelLabel(ch: number): string {
+  const langs = GameList.find(g => g.id === props.gameId)?.audioLangs ?? []
+  return AUDIO_LANG_LABELS[langs[ch] ?? ''] ?? `通道 ${ch}`
+}
 watch(audioVolume, (val) => {
   if (gainNode)
     gainNode.gain.value = val
@@ -737,7 +742,7 @@ onUnmounted(() => {
                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'"
                   @click="switchChannel(ch)"
                 >
-                  通道 {{ ch }}
+                  {{ getChannelLabel(ch) }}
                 </button>
                 <div class="ml-auto flex items-center gap-2">
                   <span class="shrink-0 text-xs text-gray-400 dark:text-gray-500">音量</span>

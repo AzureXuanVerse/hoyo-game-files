@@ -35,3 +35,9 @@ export async function decodeUsm(data: Uint8Array, keyHex: string): Promise<Decod
     audioChannels: (result.audio_channels ?? []) as UsmAudioChannel[],
   }
 }
+
+export async function decodeUsmToMkv(data: Uint8Array, keyHex: string, chIndex?: number | null): Promise<Uint8Array> {
+  await initWasm()
+  const { decode_usm_to_mkv } = await import('@/assets/usm/usm_decoder.js')
+  return decode_usm_to_mkv(data, keyHex, chIndex ?? undefined) as Uint8Array
+}

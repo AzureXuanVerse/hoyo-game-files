@@ -13,6 +13,8 @@ export function decode_hca(channels_data: Array<any>, key_hex: string): Uint8Arr
 
 export function decode_usm(data: Uint8Array, key_hex: string): any;
 
+export function decode_usm_to_mkv(data: Uint8Array, key_hex: string, ch_index?: number | null): Uint8Array;
+
 export function init(): void;
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
@@ -22,6 +24,7 @@ export interface InitOutput {
     readonly __wbg_usmstreamdecoder_free: (a: number, b: number) => void;
     readonly decode_hca: (a: any, b: number, c: number) => [number, number, number];
     readonly decode_usm: (a: number, b: number, c: number, d: number) => [number, number, number];
+    readonly decode_usm_to_mkv: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
     readonly init: () => void;
     readonly usmstreamdecoder_finish: (a: number) => [number, number, number];
     readonly usmstreamdecoder_new: (a: number, b: number) => [number, number, number];

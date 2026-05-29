@@ -439,7 +439,7 @@ function onPlay(
   }
 }
 
-function onExportWebm(
+function onExportMkv(
   directDownloadUrl: string | null,
   bestChunkVersion: string | null,
 ) {
@@ -448,7 +448,7 @@ function onExportWebm(
   const keyHex = getEntryKeyHex(selectedFile.value.filename)
   if (!keyHex)
     return
-  downloadStore.addUsmWebmExportTask({
+  downloadStore.addUsmMkvExportTask({
     filename: selectedFile.value.filename,
     filePath: selectedFile.value.path,
     keyHex,
@@ -763,10 +763,10 @@ function onExportWebm(
                           </button>
                           <button
                             class="inline-flex items-center gap-1 rounded-md bg-orange-50 px-2 py-1 text-xs font-medium text-orange-600 hover:bg-orange-100 dark:bg-orange-900/20 dark:text-orange-400 dark:hover:bg-orange-900/40"
-                            @click="onExportWebm(entry.directDownloadUrl, entry.bestChunkVersion)"
+                            @click="onExportMkv(entry.directDownloadUrl, entry.bestChunkVersion)"
                           >
                             <LucideDownload class="h-3 w-3" />
-                            导出 WebM + WAV
+                            导出 MKV
                           </button>
                         </template>
                       </template>

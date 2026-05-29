@@ -61,6 +61,18 @@ export function decode_usm(data, key_hex) {
     return takeFromExternrefTable0(ret[0]);
 }
 
+export function decode_usm_to_mkv(data, key_hex, ch_index) {
+    const ptr0 = passArray8ToWasm0(data, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passStringToWasm0(key_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.decode_usm_to_mkv(ptr0, len0, ptr1, len1, isLikeNone(ch_index) ? 0xFFFFFF : ch_index);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
 export function init() {
     wasm.init();
 }
@@ -277,6 +289,10 @@ function handleError(f, args) {
         const idx = addToExternrefTable0(e);
         wasm.__wbindgen_exn_store(idx);
     }
+}
+
+function isLikeNone(x) {
+    return x === undefined || x === null;
 }
 
 function passArray8ToWasm0(arg, malloc) {

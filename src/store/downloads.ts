@@ -3,7 +3,7 @@ import { defineStore } from 'pinia'
 import { API_BASE } from '@/constants/core'
 import { downloadChunks } from '@/utils/chunk'
 import { fetchAndParseManifest } from '@/utils/manifest'
-import { decodeUsm } from '@/utils/usm'
+import { decodeUsmToMkv } from '@/utils/usm'
 
 const MAX_CONCURRENT = 3
 
@@ -98,8 +98,8 @@ export const useDownloadStore = defineStore('downloads', () => {
       if (task.type === 'manifest-json') {
         await runManifestJsonTask(task)
       }
-      else if (task.type === 'usm-webm-export') {
-        await runUsmWebmExportTask(task)
+      else if (task.type === 'usm-mkv-export') {
+        await runUsmMkvExportTask(task)
       }
       else {
         await runChunkFileTask(task)
@@ -270,7 +270,7 @@ export const useDownloadStore = defineStore('downloads', () => {
     processQueue()
   }
 
-  const webmExportTaskData = new Map<string, {
+  const mkvExportTaskData = new Map<string, {
     filename: string
     filePath: string
     keyHex: string
@@ -280,8 +280,8 @@ export const useDownloadStore = defineStore('downloads', () => {
     manifests?: ChunkManifest[]
   }>()
 
-  async function runUsmWebmExportTask(task: DownloadTask) {
-    const data = webmExportTaskData.get(task.id)
+  async function runUsmMkvExportTask(task: DownloadTask) {
+    const data = mkvExportTaskData.get(task.id)
     if (!data)
       throw new Error('任务数据丢失')
 
@@ -391,19 +391,16 @@ export const useDownloadStore = defineStore('downloads', () => {
     setTaskStatus(task.id, 'merging')
     setTaskProgress(task.id, 85)
 
-    const { videoWebm, audioChannels } = await decodeUsm(usmBytes!, keyHex)
+    const mkvData = await decodeUsmToMkv(usmBytes!, keyHex)
     const baseName = filename.replace(/\.usm$/i, '')
-    triggerDownload(`${baseName}.webm`, videoWebm, 'video/webm')
-    for (const ch of audioChannels) {
-      triggerDownload(`${baseName}_ch${ch.channel}.wav`, ch.wav, 'audio/wav')
-    }
+    triggerDownload(`${baseName}.mkv`, mkvData, 'video/x-matroska')
 
     setTaskStatus(task.id, 'success')
     setTaskProgress(task.id, 100)
-    webmExportTaskData.delete(task.id)
+    mkvExportTaskData.delete(task.id)
   }
 
-  function addUsmWebmExportTask(params: {
+  function addUsmMkvExportTask(params: {
     filename: string
     filePath: string
     keyHex: string
@@ -415,12 +412,12 @@ export const useDownloadStore = defineStore('downloads', () => {
     const baseName = params.filename.replace(/\.usm$/i, '')
     const task: DownloadTask = {
       id,
-      type: 'usm-webm-export',
+      type: 'usm-mkv-export',
       status: 'pending',
-      name: `${baseName} (WebM + WAV)`,
+      name: `${baseName}.mkv`,
       progress: 0,
     }
-    webmExportTaskData.set(id, params)
+    mkvExportTaskData.set(id, params)
     tasks.value.unshift(task)
     processQueue()
   }
@@ -437,6 +434,6 @@ export const useDownloadStore = defineStore('downloads', () => {
     cancelTask,
     addManifestJsonTask,
     addChunkFileTask,
-    addUsmWebmExportTask,
+    addUsmMkvExportTask,
   }
 })
